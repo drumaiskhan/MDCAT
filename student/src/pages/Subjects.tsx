@@ -8,7 +8,7 @@ import { Link, useParams } from 'wouter';
 import { ArrowLeft, BookOpen, SearchX, Target } from 'lucide-react';
 import {
   getListModulesQueryKey, getListSubjectsQueryKey, useListModules, useListSubjects, useListTopics,
-} from '@workspace/api-client-react';
+} from '@/lib/api-client-react';
 import { EmptyState, SectionHeader, usePageTitle } from '@/lib/shared';
 import {
   CardsSkeleton, FilterBar, RowsSkeleton, SubjectCard, SubjectsHero, TopicRow, TopicSeg, TopicsHero,

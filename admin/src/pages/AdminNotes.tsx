@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Upload, Save, Pencil, Trash2 } from 'lucide-react';
 import mammoth from 'mammoth';
 import DOMPurify from 'dompurify';
-import { useListSubjects } from '@workspace/api-client-react';
+import { useListSubjects } from '@/lib/api-client-react';
 const base=`${(apiOrigin||'').replace(/\/$/,'')}/api/study-library`;
 async function api(path:string,body?:unknown){const r=await fetch(base+path,{credentials:'include',method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d;}
 const sanitize=(html:string)=>DOMPurify.sanitize(html,{FORBID_TAGS:['style','iframe','script','form','input'],FORBID_ATTR:['style']});

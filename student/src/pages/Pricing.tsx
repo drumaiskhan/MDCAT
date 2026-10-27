@@ -6,8 +6,8 @@
 import { Link } from 'wouter';
 import { ArrowRight, Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useListMembershipPlans } from '@workspace/api-client-react';
-import type { MembershipPlan } from '@workspace/api-client-react';
+import { useListMembershipPlans } from '@/lib/api-client-react';
+import type { MembershipPlan } from '@/lib/api-client-react';
 import { siteContentApi } from '@/lib/api';
 import { cn, Footer, AnimatedBrandMark, useDocumentHead } from '@/lib/shared';
 

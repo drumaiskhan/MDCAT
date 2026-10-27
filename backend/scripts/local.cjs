@@ -8,7 +8,7 @@ function createLocalEnv(directory){const target=path.join(directory,'.env');if(f
 function npm(args){run(process.platform==='win32'?'npm.cmd':'npm',args);}
 function verifyLocal(){if(!fs.existsSync(path.join(root,'.env')))throw new Error('Run npm run setup first.');const env=fs.readFileSync(path.join(root,'.env'),'utf8');if(/replace-with-|owner@example.com/.test(env))throw new Error('Complete DATABASE_URL, JWT_SECRET and admin credentials in the root .env before starting.');if(!fs.existsSync(path.join(root,'node_modules')))throw new Error('Dependencies are missing. Run npm run setup.');}
 function main(){const action=process.argv[2]||'help';if(![24].includes(Number(process.versions.node.split('.')[0])))throw new Error('Use Node.js 24.22.1 for this project.');switch(action){
-case 'setup':{const created=createLocalEnv(root);console.log(created?'Created local .env. Your local admin email/password are in that file.':'Keeping your existing .env unchanged.');npm(['ci']);console.log('Setup complete. Start Docker Desktop, then run npm run db:start and npm run dev.');break;}
+case 'setup':{const created=createLocalEnv(root);console.log(created?'Created local .env. Your local admin email/password are in that file.':'Keeping your existing .env unchanged.');npm(['install']);npm(['install','--prefix','student']);npm(['install','--prefix','admin']);console.log('Setup complete. Start Docker Desktop, then run npm run db:start and npm run dev.');break;}
 case 'dev':verifyLocal();npm(['run','dev:all']);break;
 case 'db:start':run('docker',['compose','up','-d','--wait']);break;
 case 'db:stop':run('docker',['compose','stop']);break;

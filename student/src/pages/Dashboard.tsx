@@ -1,7 +1,7 @@
 import {useQuery} from '@tanstack/react-query';
 import {Link} from 'wouter';
 import {ArrowRight,BookOpen,Zap,FileText,Library,Flame,Target,Clock3} from 'lucide-react';
-import {useGetCurrentUser,useListSubjects} from '@workspace/api-client-react';
+import {useGetCurrentUser,useListSubjects} from '@/lib/api-client-react';
 import {analyticsApi} from '@/lib/api';
 import {WeeklyChart,SubjectDonut,DailyChart,SessionScoresChart} from '@/components/dashboard/StudentCharts';
 export default function Dashboard(){const user=useGetCurrentUser();const subjects=useListSubjects();const progress=useQuery({queryKey:['progress-overview'],queryFn:analyticsApi.overview});const streak=useQuery({queryKey:['streak-card'],queryFn:analyticsApi.streak});const summary=progress.data?.summary;return <div className="mx-auto max-w-6xl space-y-7 p-5 md:p-8"><section className="study-welcome"><p className="studio-eyebrow">Your study space · One step closer</p><h1>Good to see you{user.data?.name?`, ${user.data.name.split(' ')[0]}`:''}.</h1><p className="mt-3 max-w-lg text-sm leading-7 opacity-80">Make a little room for a big ambition. Pick up a subject, revisit an idea, or give yourself a fresh challenge.</p><div className="flex flex-wrap items-center gap-5"><Link href="/mcqs" className="studio-button">Let’s practise <ArrowRight size={17}/></Link><Link href="/exams" className="text-sm font-bold">Explore Sunday tests →</Link></div></section>

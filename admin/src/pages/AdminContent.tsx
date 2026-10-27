@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { BookOpen, ChevronDown, ChevronRight, ChevronUp, EyeOff, FolderTree, GraduationCap, Layers, Library, ListTree, Pencil, Plus, Trash2 } from 'lucide-react';
-import { getListModulesQueryKey } from '@workspace/api-client-react';
+import { getListModulesQueryKey } from '@/lib/api-client-react';
 import { toast } from '@/hooks/use-toast';
 import { ApiRequestError, blockAdminApi, moduleAdminApi, type AdminBlock, type AdminModule } from '@/lib/api';
 import { AddModuleForm, BlockForm, ConfirmDialog, EmptyState, ModuleRow, SectionHeader, SkeletonPage, cn, groupByProgramYear } from '@/lib/shared';

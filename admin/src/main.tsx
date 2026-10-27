@@ -1,6 +1,6 @@
 import {apiOrigin} from '@/lib/api-origin';
 import { createRoot } from 'react-dom/client';
-import { setBaseUrl } from '@workspace/api-client-react';
+import { setBaseUrl } from '@/lib/api-client-react';
 
 import App from './App';
 import { ErrorBoundary } from '@/components/error-boundary';

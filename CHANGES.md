@@ -1,3 +1,12 @@
+# Deployment restructure: Hostinger frontends + cPanel API
+
+- Student and admin are now packaged as two independent static Hostinger sites (`deploy/student-hostinger`, `deploy/admin-hostinger`); the API is packaged for cPanel (`deploy/api-cpanel`). New `DEPLOYMENT.md` replaces the old Hostinger-API / cPanel-frontend instructions and CPANEL-WORKFLOW.md.
+- `npm run package:hosting` now writes everything to `deploy/`, creates ready-to-upload ZIPs (hidden `.htaccess` included), no longer needs installed node_modules, and can set `API_URL` / `STUDENT_URL`.
+- New hardened Hostinger `.htaccess` (HTTPS + www redirect, SPA fallback with real 404 for missing assets, WASM MIME type, caching, security headers, dotfile blocking). Removed the Node static server and `package.json`/`server.cjs` from the frontend packages.
+- `hosting.env.example` rewritten for the cPanel API (localhost PostgreSQL, Hostinger origins, file bridge, TRUST_PROXY).
+- GitHub workflow `deploy.yml`: build/test, deploy API to cPanel over SSH (health-checked, `deploy-cpanel.sh`), then publish the built sites to branches `hostinger-student` and `hostinger-admin` (`publish-frontend-branch.sh`) for Hostinger's Git auto-deploy.
+- File bridge instructions updated: API and bridge are both on cPanel now.
+
 # Node 24 and dependency update
 
 - Node.js 24.22.1 and npm 12.2.1 targets across local setup, hosting packages and GitHub Actions.
@@ -17,3 +26,11 @@
 ## Validation
 
 All workspace TypeScript checks and three production builds passed. Clean npm ci, local environment preservation, six-format MCQ upload/commit tests and real login/session tests passed. Login tests use a PGlite PostgreSQL-compatible adapter with genuine application authentication. The isolated backend hosting package installed its production dependencies and reached its listening state; that smoke test deliberately had no live database. Docker/live PostgreSQL and real hosting deployment still require a user-environment smoke test. Browser visual validation was blocked by browser-download availability.
+
+
+## Frontends now deploy like Medify
+* Student and admin Vite builds output to `dist/` (was `dist/public`); Capacitor `webDir`, `package-hosting.mjs` and the mobile OTA workflow updated to match.
+* Hostinger builds each app from GitHub (root directory `student` or `admin`, output `dist`). Removed the `hostinger-student` / `hostinger-admin` branch publishing and `publish-frontend-branch.sh`.
+* `deploy.yml` now tests, builds and deploys only the API to cPanel.
+* `student/` and `admin/` are standalone like Medify: the shared API client is copied into each app (`src/lib/api-client-react`), `@workspace/api-client-react` imports became `@/lib/api-client-react`, `tsconfig.json` no longer extends the root, and the two apps are no longer root workspaces (root scripts use `--prefix`). The `@assets` alias to `backend/assets` was removed (unused).
+* Root `npm run setup`/CI use `npm install` (and per-app installs) until fresh lockfiles are committed.

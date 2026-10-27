@@ -2,7 +2,7 @@
 import { Link } from 'wouter';
 import { useId } from 'react';
 import { Award, CheckCircle2, Clock3, Crown, Flame, ShieldCheck, Sparkles, Target, Wifi } from 'lucide-react';
-import { useGetStudentDashboard } from '@workspace/api-client-react';
+import { useGetStudentDashboard } from '@/lib/api-client-react';
 import { TiltDiv } from '@/lib/tilt';
 import { Count } from '@/lib/fx3d';
 import { cn, initials } from '@/lib/shared';

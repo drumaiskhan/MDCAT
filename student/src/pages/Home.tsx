@@ -12,8 +12,8 @@ import {
   ArrowRight, BookOpen, Bookmark, Check, ClipboardCheck, FileStack,
   GraduationCap, Lightbulb, Library, Menu, Sparkles, Stethoscope, Target, Trophy, TrendingUp, Wand2, X, Zap,
 } from 'lucide-react';
-import { useGetCurrentUser, getGetCurrentUserQueryKey, useListMembershipPlans } from '@workspace/api-client-react';
-import type { MembershipPlan } from '@workspace/api-client-react';
+import { useGetCurrentUser, getGetCurrentUserQueryKey, useListMembershipPlans } from '@/lib/api-client-react';
+import type { MembershipPlan } from '@/lib/api-client-react';
 import { siteContentApi } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { cn, Footer, AnimatedBrandMark, Testimonials, useSeoSync } from '@/lib/shared';

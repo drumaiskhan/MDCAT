@@ -1,11 +1,142 @@
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {createRequire} from 'node:module';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');const out=root;
-for(const source of ['backend/dist/index.mjs','student/dist/public/index.html','admin/dist/public/index.html'])if(!fs.existsSync(path.join(root,source)))throw new Error(`Build first: missing ${source}`);
-const apiOrigin=process.env.API_URL||'';if(apiOrigin){const u=new URL(apiOrigin);if(u.protocol!=='https:'||u.origin!==apiOrigin.replace(/\/$/,''))throw new Error('API_URL must be an HTTPS origin only (no /api).');}
-fs.mkdirSync(out,{recursive:true});
-for(const app of ['student','admin']){const destination=path.join(out,app,'hosting');fs.rmSync(destination,{recursive:true,force:true});fs.cpSync(path.join(root,`${app}/dist/public`),destination,{recursive:true});fs.copyFileSync(path.join(root,'backend/scripts/static-server.cjs'),path.join(destination,'server.cjs'));fs.writeFileSync(path.join(destination,'package.json'),JSON.stringify({name:`mdcat-${app}-static`,private:true,scripts:{start:'node server.cjs',build:'node -e "console.log(\'Static build ready\')"'},engines:{node:'>=24.22.1 <25'},packageManager:'npm@12.2.1'},null,2));if(apiOrigin)fs.writeFileSync(path.join(destination,'config.js'),`window.__MDCAT_CONFIG__ = ${JSON.stringify({apiOrigin:apiOrigin.replace(/\/$/,'')})};\n`);}
-const api=path.join(out,'backend','hosting');fs.rmSync(api,{recursive:true,force:true});fs.mkdirSync(api,{recursive:true});fs.cpSync(path.join(root,'backend/dist'),path.join(api,'dist'),{recursive:true,filter:s=>!s.endsWith('.map')});const assets=path.join(root,'backend/assets');if(fs.existsSync(assets))fs.cpSync(assets,path.join(api,'assets'),{recursive:true});
-const req=createRequire(path.join(root,'backend/package.json'));const dependencies={};for(const name of ['@napi-rs/canvas','pdfjs-dist','nodemailer','pino','pino-http','pino-pretty'])dependencies[name]=req(`${name}/package.json`).version;
-fs.writeFileSync(path.join(api,'package.json'),JSON.stringify({name:'mdcat-api-runtime',private:true,main:'app.js',scripts:{start:'node app.js',build:'node -e "console.log(\'API already built\')"'},engines:{node:'>=24.22.1 <25'},packageManager:'npm@12.2.1',dependencies},null,2));
-fs.writeFileSync(path.join(api,'app.js'),"const path=require('node:path');const {pathToFileURL}=require('node:url');process.chdir(__dirname);process.env.NODE_ENV=process.env.NODE_ENV||'production';import(pathToFileURL(path.join(__dirname,'dist/index.mjs')).href).catch(e=>{console.error(e);process.exit(1);});\n");fs.writeFileSync(path.join(api,'server.cjs'),"require('./app.js');\n");
-fs.copyFileSync(path.join(root,'hosting.env.example'),path.join(api,'.env.example'));fs.writeFileSync(path.join(out,'HOSTING-FOLDERS.txt'),'Read HOSTING-AND-LOCAL.md in the source root. Upload student/admin CONTENTS to separate domains; edit config.js on each. Upload api CONTENTS to a separate Node app, install with npm install --omit=dev, set environment variables, startup app.js. No production secrets are included.\n');console.log('Created student/hosting, admin/hosting and backend/hosting. Set config.js and API environment before hosting.');
+// Builds the three upload-ready deployment packages (run AFTER `npm run build`):
+//
+//   deploy/student-hostinger/   -> Hostinger site #1 (student portal, static)
+//   deploy/admin-hostinger/     -> Hostinger site #2 (admin portal, static)
+//   deploy/api-cpanel/          -> cPanel "Setup Node.js App" (API)
+//   deploy/filebridge-cpanel/   -> optional PHP file bridge for big book PDFs (cPanel)
+//   deploy/zips/*.zip           -> one ready-to-upload ZIP per folder (dotfiles such as .htaccess included)
+//
+// Optional environment variables:
+//   API_URL      https://api.example.com      written to both config.js files
+//   STUDENT_URL  https://example.com          replaces the mdcat.example.com placeholder (canonical, sitemap, robots)
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const out = path.join(root, 'deploy');
+const rel = (...p) => path.join(root, ...p);
+
+for (const source of ['backend/dist/index.mjs', 'student/dist/index.html', 'admin/dist/index.html'])
+  if (!fs.existsSync(rel(source))) throw new Error(`Build first (npm run build): missing ${source}`);
+
+function httpsOrigin(name, value) {
+  if (!value) return '';
+  let u;
+  try { u = new URL(value); } catch { throw new Error(`${name} must be an HTTPS origin such as https://example.com`); }
+  if (u.protocol !== 'https:' || u.origin !== value.replace(/\/$/, '')) throw new Error(`${name} must be an HTTPS origin only (no path, no /api).`);
+  return u.origin;
+}
+const apiOrigin = httpsOrigin('API_URL', process.env.API_URL);
+const studentOrigin = httpsOrigin('STUDENT_URL', process.env.STUDENT_URL);
+
+fs.rmSync(out, { recursive: true, force: true });
+fs.mkdirSync(path.join(out, 'zips'), { recursive: true });
+
+const configJs = (origin) =>
+  `// Runtime configuration. Set apiOrigin to your cPanel API address (https, no /api, no trailing slash).\n// You can edit this file on the server at any time - no rebuild needed.\nwindow.__MDCAT_CONFIG__ = ${JSON.stringify({ apiOrigin: origin })};\n`;
+
+// ---- Frontends (Hostinger static) -------------------------------------------------
+for (const app of ['student', 'admin']) {
+  const dest = path.join(out, `${app}-hostinger`);
+  fs.cpSync(rel(app, 'dist'), dest, { recursive: true });
+  fs.copyFileSync(rel('backend/scripts/templates/static-site.htaccess'), path.join(dest, '.htaccess'));
+  fs.writeFileSync(path.join(dest, 'config.js'), configJs(apiOrigin));
+  if (app === 'student' && studentOrigin) {
+    const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (/\.(html|xml|txt|js)$/.test(e.name)) {
+        const text = fs.readFileSync(f, 'utf8');
+        if (text.includes('https://mdcat.example.com')) fs.writeFileSync(f, text.replaceAll('https://mdcat.example.com', studentOrigin));
+      }
+    } };
+    walk(dest);
+  }
+}
+
+// ---- API (cPanel Node.js app) ----------------------------------------------------
+const api = path.join(out, 'api-cpanel');
+fs.mkdirSync(api, { recursive: true });
+fs.cpSync(rel('backend/dist'), path.join(api, 'dist'), { recursive: true, filter: (s) => !s.endsWith('.map') });
+if (fs.existsSync(rel('backend/assets'))) fs.cpSync(rel('backend/assets'), path.join(api, 'assets'), { recursive: true });
+const backendPkg = JSON.parse(fs.readFileSync(rel('backend/package.json'), 'utf8'));
+const dependencies = {};
+for (const name of ['@napi-rs/canvas', 'pdfjs-dist', 'nodemailer', 'pino', 'pino-http', 'pino-pretty']) {
+  const v = backendPkg.dependencies?.[name] ?? backendPkg.devDependencies?.[name];
+  if (!v) throw new Error(`backend/package.json has no version for ${name}`);
+  dependencies[name] = v;
+}
+fs.writeFileSync(path.join(api, 'package.json'), JSON.stringify({
+  name: 'mdcat-api-runtime', private: true, main: 'app.js',
+  scripts: { start: 'node app.js', build: 'node -e "console.log(\'API already built\')"' },
+  engines: { node: '>=24.22.1 <25' }, packageManager: 'npm@12.2.1', dependencies,
+}, null, 2) + '\n');
+// cPanel/Passenger startup file.
+fs.writeFileSync(path.join(api, 'app.js'),
+  "const path=require('node:path');const {pathToFileURL}=require('node:url');process.chdir(__dirname);process.env.NODE_ENV=process.env.NODE_ENV||'production';import(pathToFileURL(path.join(__dirname,'dist/index.mjs')).href).catch(e=>{console.error(e);process.exit(1);});\n");
+fs.copyFileSync(rel('hosting.env.example'), path.join(api, '.env.example'));
+
+// ---- Optional PHP file bridge (cPanel) -------------------------------------------
+const bridge = path.join(out, 'filebridge-cpanel');
+fs.cpSync(rel('backend/cpanel-filebridge'), bridge, { recursive: true });
+
+fs.writeFileSync(path.join(out, 'README.txt'),
+`MDCAT deployment packages (generated by "npm run package:hosting")
+
+  student-hostinger/    upload CONTENTS to the Hostinger site for the student portal (e.g. example.com)
+  admin-hostinger/      upload CONTENTS to the Hostinger site for the admin portal   (e.g. admin.example.com)
+  api-cpanel/           upload CONTENTS to a NEW folder on cPanel (outside public_html) and create a Node.js app (startup file app.js)
+  filebridge-cpanel/    optional: only if you want PDFs over 200 MB stored on the cPanel disk
+  zips/                 the same folders as ready-to-upload ZIPs (hidden .htaccess included)
+
+Full step-by-step instructions: DEPLOYMENT.md in the project root.
+No secrets are included. Set the API environment variables inside cPanel.
+`);
+
+// ---- ZIPs (pure Node, keeps dotfiles) ---------------------------------------------
+function listFiles(dir, base = dir) {
+  const entries = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const full = path.join(dir, e.name);
+    const name = path.relative(base, full).split(path.sep).join('/');
+    if (e.isDirectory()) { entries.push({ name: name + '/', dir: true }); entries.push(...listFiles(full, base)); }
+    else entries.push({ name, full });
+  }
+  return entries;
+}
+function writeZip(sourceDir, zipPath) {
+  const chunks = []; const central = []; let offset = 0;
+  const dosTime = 0x0000, dosDate = (46 << 9) | (1 << 5) | 1; // fixed 2026-01-01 => reproducible archives
+  for (const entry of listFiles(sourceDir)) {
+    const nameBuf = Buffer.from(entry.name, 'utf8');
+    const data = entry.dir ? Buffer.alloc(0) : fs.readFileSync(entry.full);
+    const comp = entry.dir ? Buffer.alloc(0) : zlib.deflateRawSync(data, { level: 9 });
+    const useDeflate = !entry.dir && comp.length < data.length;
+    const body = useDeflate ? comp : data;
+    const crc = entry.dir ? 0 : zlib.crc32(data);
+    const method = useDeflate ? 8 : 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6); local.writeUInt16LE(method, 8);
+    local.writeUInt16LE(dosTime, 10); local.writeUInt16LE(dosDate, 12); local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26); local.writeUInt16LE(0, 28);
+    chunks.push(local, nameBuf, body);
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE((3 << 8) | 20, 4); cen.writeUInt16LE(20, 6); cen.writeUInt16LE(0x0800, 8); cen.writeUInt16LE(method, 10);
+    cen.writeUInt16LE(dosTime, 12); cen.writeUInt16LE(dosDate, 14); cen.writeUInt32LE(crc, 16); cen.writeUInt32LE(body.length, 20); cen.writeUInt32LE(data.length, 24);
+    cen.writeUInt16LE(nameBuf.length, 28); cen.writeUInt32LE(((entry.dir ? 0o40755 : 0o100644) << 16) >>> 0, 38); cen.writeUInt32LE(offset, 42);
+    central.push(cen, nameBuf);
+    offset += 30 + nameBuf.length + body.length;
+  }
+  const centralBuf = Buffer.concat(central);
+  const count = central.length / 2;
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(count, 8); end.writeUInt16LE(count, 10); end.writeUInt32LE(centralBuf.length, 12); end.writeUInt32LE(offset, 16);
+  fs.writeFileSync(zipPath, Buffer.concat([...chunks, centralBuf, end]));
+}
+const zipNames = { 'student-hostinger': 'student-hostinger.zip', 'admin-hostinger': 'admin-hostinger.zip', 'api-cpanel': 'api-cpanel.zip', 'filebridge-cpanel': 'filebridge-cpanel.zip' };
+for (const [folder, zip] of Object.entries(zipNames)) writeZip(path.join(out, folder), path.join(out, 'zips', zip));
+
+console.log('Created deploy/student-hostinger, deploy/admin-hostinger, deploy/api-cpanel, deploy/filebridge-cpanel and deploy/zips/*.zip');
+if (!apiOrigin) console.log('NOTE: API_URL was not set - edit config.js on each Hostinger site after upload.');

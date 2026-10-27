@@ -1,0 +1,1 @@
+import{o as e}from"./motion-BB6RUJ9p.js";import{t}from"./AdminCurriculum-Bk7Tz8Kp.js";var n=e();function r(){return(0,n.jsx)(t,{topics:!0})}export{r as default};

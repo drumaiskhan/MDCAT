@@ -1,7 +1,7 @@
 // v60 — performance insights shown under the MCQ result score. Pure derivation from the session; no API.
 import { Link } from 'wouter';
 import { Brain, Target, Zap } from 'lucide-react';
-import type { Mcq } from '@workspace/api-client-react';
+import type { Mcq } from '@/lib/api-client-react';
 import { cn } from '@/lib/shared';
 
 const STOP = new Set(['which', 'following', 'patient', 'most', 'likely', 'would', 'about', 'these', 'their', 'there', 'where', 'what', 'years', 'presents', 'shows', 'because', 'after', 'between', 'should', 'cause', 'caused', 'best', 'next', 'statement', 'true', 'false', 'correct', 'answer', 'being', 'therefore', 'seen', 'found', 'used']);

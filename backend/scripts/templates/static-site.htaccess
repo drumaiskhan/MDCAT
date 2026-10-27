@@ -1,0 +1,54 @@
+# MDCAT static single-page app for Hostinger (LiteSpeed/Apache). Upload to the site's document root.
+# Hosts only the pre-built frontend; the API lives on your cPanel server (see config.js).
+
+Options -MultiViews -Indexes
+DirectoryIndex index.html
+AddDefaultCharset UTF-8
+
+# Correct MIME types (WASM is used by the PDF/book reader).
+AddType application/wasm .wasm
+AddType text/javascript .js .mjs
+AddType image/svg+xml .svg
+AddType application/octet-stream .bcmap
+
+RewriteEngine On
+
+# 1. Force HTTPS (also works behind Hostinger's CDN/proxy, which sends X-Forwarded-Proto).
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# 2. www.example.com -> example.com (the API only allows the exact origins listed in APP_URL).
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+
+# 3. Never serve dotfiles or deploy/config files.
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+RewriteRule ^(package(-lock)?\.json|server\.cjs|\.env.*)$ - [F,L]
+
+# 4. Hashed build assets are cacheable forever.
+RewriteRule ^assets/ - [E=MDCAT_IMMUTABLE:1]
+
+# 5. Single-page-app fallback: unknown paths without a file extension load index.html.
+#    A missing file WITH an extension (e.g. an old /assets/x.js) returns a real 404
+#    instead of HTML, so stale tabs fail clearly instead of with a syntax error.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !\.[A-Za-z0-9]{1,6}$
+RewriteRule ^ index.html [L]
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header set Cache-Control "public, max-age=31536000, immutable" env=MDCAT_IMMUTABLE
+  # The shell and runtime config must always be fresh so a new deploy / new API origin takes effect immediately.
+  <FilesMatch "^(index\.html|config\.js|robots\.txt|sitemap\.xml)$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml text/plain application/xml
+</IfModule>

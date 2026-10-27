@@ -28,11 +28,11 @@ import {
   useListMcqs, useListModules, useListNotifications, useListPayments, useListResources,
   useListStudents, useListSubjects, useListTopics, useRejectPayment,
   useSubmitPayment, useUpdateMembershipPlan,
-} from '@workspace/api-client-react';
+} from '@/lib/api-client-react';
 import type {
   AdminDashboard, Flashcard, Mcq, MembershipPlan, Module, Notification, Payment, Resource,
   Student, Subject, Topic, User
-} from '@workspace/api-client-react';
+} from '@/lib/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { CommandPalette, type PalettePage } from '@/components/search/CommandPalette';
 import { BlockPoster, ModulePoster } from '@/components/blocks/BlockCards';

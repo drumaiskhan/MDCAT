@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.mdcatproffs.app',
   appName: 'MDCAT Proffs',
-  webDir: 'dist/public',
+  webDir: 'dist',
 
   // Android 15 (targetSdk 35) draws edge-to-edge, which put the app header
   // under the status bar. This insets the WebView below the system bars.

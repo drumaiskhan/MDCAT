@@ -5,14 +5,14 @@
   "scripts": {
     "build": "npm run typecheck && npm run build:api && npm run build:student && npm run build:admin",
     "typecheck:libs": "tsc --build",
-    "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present && npm run typecheck --prefix student && npm run typecheck --prefix admin",
     "dev": "node backend/scripts/local.cjs dev",
     "dev:api": "npm run dev --workspace=@workspace/api-server",
-    "dev:student": "npm run dev --workspace=@workspace/frontend-student",
-    "dev:admin": "npm run dev --workspace=@workspace/frontend-admin",
+    "dev:student": "npm run dev --prefix student",
+    "dev:admin": "npm run dev --prefix admin",
     "build:api": "tsc --build && npm run build --workspace=@workspace/api-server",
-    "build:student": "tsc --build && npm run build --workspace=@workspace/frontend-student",
-    "build:admin": "tsc --build && npm run build --workspace=@workspace/frontend-admin",
+    "build:student": "npm run build --prefix student",
+    "build:admin": "npm run build --prefix admin",
     "start": "npm run start --workspace=@workspace/api-server",
     "db:push": "npm run push --workspace=@workspace/db",
     "test:mdcat": "node backend/tests/mdcat/integration.mjs",
@@ -22,7 +22,8 @@
     "setup": "node backend/scripts/local.cjs setup",
     "doctor": "node backend/scripts/local.cjs doctor",
     "package:hosting": "node backend/scripts/package-hosting.mjs",
-    "test:auth": "node backend/tests/mdcat/auth.mjs"
+    "test:auth": "node backend/tests/mdcat/auth.mjs",
+    "install:apps": "npm install --prefix student && npm install --prefix admin"
   },
   "private": true,
   "dependencies": {
@@ -37,8 +38,6 @@
     "typescript": "7.0.2"
   },
   "workspaces": [
-    "admin",
-    "student",
     "backend",
     "backend/lib/*",
     "backend/scripts"

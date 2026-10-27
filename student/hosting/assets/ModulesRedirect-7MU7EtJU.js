@@ -1,0 +1,1 @@
+import{r as e}from"./rolldown-runtime-XKyaHtl9.js";import{s as t}from"./vendor-B8rnL-pN.js";import{g as n}from"./charts-BRRO7gbc.js";import{o as r}from"./motion-tHgJxrDy.js";import{It as i}from"./index-BxcoUoHj.js";var a=e(n(),1),o=r();function s(){let[,e]=t();return(0,a.useEffect)(()=>{e(`/blocks`,{replace:!0})},[e]),(0,o.jsx)(i,{})}export{s as default};

@@ -47,11 +47,9 @@ Thumbs.db
 **/*.xcuserstate
 **/xcuserdata/
 
-# Hostinger web-hosting packages
-hostinger-out/
 
 # Generated hosting artifacts and temporary integration databases
-**/hosting/
+deploy/
 .mdcat-test-*/
 *-upload.zip
 

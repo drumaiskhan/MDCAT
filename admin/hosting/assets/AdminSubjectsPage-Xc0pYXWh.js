@@ -1,0 +1,1 @@
+export{t as default}from"./AdminCurriculum-DKyys7Bx.js";

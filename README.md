@@ -19,15 +19,17 @@ Use the generated credentials in root `.env`: DEFAULT_ADMIN_EMAIL / DEFAULT_ADMI
 
 Change the name in Admin → Learning settings. Design & Branding controls the shared theme. Subjects → Topics are the content hierarchy.
 
+Production layout: **student** and **admin** are two separate static sites on **Hostinger**; the **backend** API runs on **cPanel** (Node.js + PostgreSQL).
+
 ```sh
 npm run build
 npm run package:hosting
 ```
 
-Upload **student/hosting**, **admin/hosting**, and **backend/hosting** to their respective hosts. See [HOSTING-AND-LOCAL.md](HOSTING-AND-LOCAL.md) for exact environment settings and cPanel/Hostinger instructions. Backend requires Node.js and a reachable PostgreSQL database (ordinary PHP/MySQL-only hosting cannot run this backend).
+This writes upload-ready folders and ZIPs to `deploy/` (student-hostinger, admin-hostinger, api-cpanel, optional filebridge-cpanel). Follow [DEPLOYMENT.md](DEPLOYMENT.md) for the exact steps, DNS, environment variables and optional GitHub Actions deployment. Backend requires Node.js and a reachable PostgreSQL database (ordinary PHP/MySQL-only hosting cannot run this backend).
 
 Checks: `npm run typecheck`, `npm run test:mdcat`, `npm run test:auth`. No pnpm or Corepack required. `npm ci` installs from the included lockfile.
 
-GitHub Actions cPanel deployment is included: see [CPANEL-WORKFLOW.md](CPANEL-WORKFLOW.md). Keep `.github/workflows/cpanel-deploy.yml` at your GitHub repository root.
+GitHub Actions deployment (API to cPanel; frontends via Hostinger Git branches) is described in [DEPLOYMENT.md](DEPLOYMENT.md). Keep `.github/workflows/deploy.yml` at your GitHub repository root.
 
 Latest update: Node.js 24.22.1 / npm 12.2.1; OSPE/OSCE and Resources panels removed. See [DEPENDENCY-UPDATE.md](DEPENDENCY-UPDATE.md) for dependency versions and checks.

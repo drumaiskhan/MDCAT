@@ -1,7 +1,7 @@
 // v60 — study intelligence built ONLY on existing endpoints + this device's localStorage.
 // (No backend / schema / route changes.) The mistake ledger and spaced-repetition state live
 // on the device; everything else is derived from /student/progress-overview, /mcqs, /flashcards.
-import { listMcqs, type Mcq } from '@workspace/api-client-react';
+import { listMcqs, type Mcq } from '@/lib/api-client-react';
 import { analyticsApi, flaggedMcqsApi } from '@/lib/api';
 
 /* ---------------- Mistake ledger ---------------- */

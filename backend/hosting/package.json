@@ -1,0 +1,21 @@
+{
+  "name": "mdcat-api-runtime",
+  "private": true,
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "build": "node -e \"console.log('API already built')\""
+  },
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "packageManager": "npm@12.2.1",
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.13",
+    "pdfjs-dist": "6.4.299",
+    "nodemailer": "10.2.1",
+    "pino": "10.4.0",
+    "pino-http": "11.0.0",
+    "pino-pretty": "13.2.0"
+  }
+}

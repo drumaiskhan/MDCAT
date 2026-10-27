@@ -11,7 +11,7 @@
 // launches and OTA bundle swaps) and sends it as `Authorization: Bearer`.
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
-import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { setAuthTokenGetter } from '@/lib/api-client-react';
 
 const TOKEN_KEY = 'medschool.native.authToken';
 

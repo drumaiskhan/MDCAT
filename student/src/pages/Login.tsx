@@ -131,7 +131,7 @@ import {
   useRejectPayment,
   useSubmitPayment,
   useUpdateMembershipPlan,
-} from '@workspace/api-client-react';
+} from '@/lib/api-client-react';
 
 import type {
   AdminDashboard,
@@ -146,7 +146,7 @@ import type {
   Subject,
   Topic,
   User,
-} from '@workspace/api-client-react';
+} from '@/lib/api-client-react';
 
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';

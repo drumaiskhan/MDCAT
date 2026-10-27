@@ -1,0 +1,1 @@
+const path=require('node:path');const {pathToFileURL}=require('node:url');process.chdir(__dirname);process.env.NODE_ENV=process.env.NODE_ENV||'production';import(pathToFileURL(path.join(__dirname,'dist/index.mjs')).href).catch(e=>{console.error(e);process.exit(1);});

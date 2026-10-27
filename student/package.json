@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/frontend-student",
+  "name": "mdcat-student",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -63,7 +63,6 @@
     "@types/react-dom": "19.3.0",
     "@types/three": "0.186.0",
     "@vitejs/plugin-react": "6.1.2",
-    "@workspace/api-client-react": "*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",

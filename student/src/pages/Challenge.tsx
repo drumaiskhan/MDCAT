@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Swords, Search, Share2, CheckCircle2, XCircle, Clock3, Trophy, ArrowLeft, X, GraduationCap, SlidersHorizontal } from 'lucide-react';
 import { authApi, blocksApi, type Block, challengesApi, ApiRequestError, type ChallengeOpponent, type ChallengeSummary } from '@/lib/api';
-import { getGetCurrentUserQueryKey, getListSubjectsQueryKey, getListTopicsQueryKey, useListModules, useListSubjects, useListTopics } from '@workspace/api-client-react';
+import { getGetCurrentUserQueryKey, getListSubjectsQueryKey, getListTopicsQueryKey, useListModules, useListSubjects, useListTopics } from '@/lib/api-client-react';
 import { EmptyState, SectionHeader, SkeletonPage, Badge, cn, initials, BrandSpinner } from '@/lib/shared';
 import { toast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

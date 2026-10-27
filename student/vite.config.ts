@@ -2,7 +2,7 @@ import path from 'path';
 import { cpSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
-const pdfAssets = () => ({name:'pdf-assets', closeBundle(){for(const dir of ['cmaps','standard_fonts','wasm','iccs']){const source=path.join(pdfRoot,dir);if(existsSync(source))cpSync(source,path.resolve(import.meta.dirname,'dist/public/pdf-assets',dir),{recursive:true});}}});
+const pdfAssets = () => ({name:'pdf-assets', closeBundle(){for(const dir of ['cmaps','standard_fonts','wasm','iccs']){const source=path.join(pdfRoot,dir);if(existsSync(source))cpSync(source,path.resolve(import.meta.dirname,'dist/pdf-assets',dir),{recursive:true});}}});
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
@@ -45,19 +45,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'src'),
-      '@assets': path.resolve(
-        import.meta.dirname,
-        '..',
-        'backend',
-        'assets',
-      ),
     },
     dedupe: ['react', 'react-dom'],
   },
   root: path.resolve(import.meta.dirname),
   esbuild: { drop: process.env.NODE_ENV === 'production' ? ['debugger'] : [] },
   build: {
-    outDir: path.resolve(import.meta.dirname, 'dist/public'),
+    outDir: path.resolve(import.meta.dirname, 'dist'),
     emptyOutDir: true,
     target: 'es2020',        // modern phones: less transpiled/polyfilled code
     cssCodeSplit: true,     // each lazy page ships only its own CSS
