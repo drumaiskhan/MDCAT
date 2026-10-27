@@ -1,0 +1,1205 @@
+import {apiOrigin} from '@/lib/api-origin';
+import { queryClient } from '@/lib/query-client';
+// Hand-written fetch helpers for endpoints added on top of the generated
+// api-client-react hooks (register/login flows, academic structure CRUD,
+// platform settings, uploads, audit logs). Kept separate from the generated
+// client so regenerating it later won't clobber these.
+
+// Same-origin deployments (frontend + backend served from one host) work
+// with the default relative "/api" path. Split deployments (e.g. frontend
+// on Vercel/Netlify, backend on Railway/Render) need VITE_API_BASE_URL set
+// to the backend's origin (e.g. https://your-api.up.railway.app — no /api
+// suffix; it's added automatically, matching setBaseUrl() in main.tsx).
+const API_ORIGIN = (apiOrigin as string | undefined)?.replace(/\/$/, '') || '';
+const API_BASE = `${API_ORIGIN}/api`;
+
+export class ApiRequestError extends Error {
+  status: number;
+  data: unknown;
+  constructor(status: number, message: string, data: unknown) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
+// Uploaded-file paths returned by the API (payment proofs, favicons, team
+// photos, resources) are relative ("/api/uploads/...") for local disk
+// storage. That works fine same-origin, but on a split deployment (admin
+// frontend and API on different hosts/ports — e.g. local dev with the admin
+// app on :5174 and the API on a different port with no proxy configured)
+// a bare <img src="/api/uploads/..."> resolves against the ADMIN app's own
+// origin, not the API's, and 404s. Always route uploaded-file URLs through
+// this so they resolve against the configured API origin.
+export function resolveUploadUrl(pathOrUrl: string | null | undefined): string | null {
+  if (!pathOrUrl) return null;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl; // already absolute (e.g. Supabase Storage URL)
+  return `${API_ORIGIN}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`;
+}
+
+// Wraps a fetch() call that can fail before any Response ever comes back
+// (DNS/TLS failure, the connection being reset mid-request, or the browser
+// blocking the response as a CORS violation). fetch() rejects in all of
+// these cases with a bare `TypeError: Failed to fetch` — no status, no
+// body — which every call site here used to let bubble up unwrapped, so
+// the UI's `err instanceof ApiRequestError ? err.message : 'Something went
+// wrong.'` fallback always landed on the generic message with zero
+// diagnostic value (exactly what showed for the full-backup restore: a
+// network-level failure, not a server error, so there was never a JSON
+// body to read a real message from). status 0 distinguishes this from any
+// real HTTP response the server sent.
+async function fetchOrThrow(input: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    throw new ApiRequestError(
+      0,
+      "The request never reached the server (or the connection dropped mid-request) — this is a network/CORS-level failure, not something the server returned. Usually means: the API is unreachable, a proxy/firewall in front of it rejected or timed out the request, or the server process restarted mid-request. Check the API server's own logs for this request; if there's nothing there at all, the request never arrived.",
+      { originalError: err instanceof Error ? err.message : String(err) },
+    );
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetchOrThrow(`${API_BASE}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await res.json().catch(() => null) : null;
+  if (!res.ok) {
+    // A non-JSON 404/error response here almost always means this request
+    // never reached the Express API at all — e.g. VITE_API_BASE_URL isn't
+    // set (or points at the wrong host) on a split deploy, so the fetch hit
+    // a static host (Netlify/Vercel) with no route for /api/*, or a
+    // same-origin deploy with no backend behind it. A real API error from
+    // our own server always comes back as JSON (see app.ts's catch-all and
+    // error handler), so surface that distinction instead of a bare status
+    // code that looks like an app bug.
+    const fallback = !isJson
+      ? ([502, 503, 504].includes(res.status)
+          ? 'This is taking longer than expected. Try again — if it keeps happening, try a shorter or simpler request.'
+          : `Can't reach the API (HTTP ${res.status}). Check that VITE_API_BASE_URL is set correctly for this deployment and that the backend is running.`)
+      : `Request failed (${res.status})`;
+    throw new ApiRequestError(res.status, (data && (data.error || data.message)) || fallback, data);
+  }
+  return data as T;
+}
+
+// Small helper for building "?a=1&b=2" query strings from a params object,
+// skipping any key whose value is undefined/empty — used by list endpoints
+// that take more than one optional filter (e.g. institutions active+kind).
+function qs(params: Record<string, string | number | boolean | undefined>): string {
+  const parts = Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface Institution { id: number; name: string; city: string; kind: string; active: boolean; displayOrder: number }
+export interface Program { id: number; institutionId: number; name: string; kind: string; active: boolean; displayOrder: number }
+export interface AcademicYear { id: number; programId: number; label: string; yearNumber: number | null; active: boolean; displayOrder: number }
+export interface Batch { id: number; academicYearId: number; label: string; active: boolean; displayOrder: number }
+
+export interface AuthUser {
+  id: number; name: string; email: string; role: string; status: string; emailVerified: boolean;
+  institution: string | null; program: string | null;
+  institutionId: number | null; programId: number | null; academicYearId: number | null; batchId: number | null;
+  rollNumber: string | null; phone: string | null;
+}
+
+export interface PlatformSettings {
+  [key: string]: string;
+  ADMIN_SIGNUP_CODE: string; SUPPORT_WHATSAPP: string; APP_DOWNLOAD_URL: string; PLATFORM_NAME: string; PLATFORM_TAGLINE: string;
+  DEFAULT_CURRENCY: string; PAYMENT_INSTRUCTIONS: string; ANNOUNCEMENT_BANNER: string; REGISTRATION_ENABLED: string; AI_VISUALIZER_ENABLED: string; AI_MCQ_MAKER_ENABLED: string; AI_MCQ_MAKER_SAVE_TO_QBANK: string; AI_MCQ_MAKER_AUTO_PUBLISH: string; AI_EXPLAIN_ENABLED: string; GLOBAL_TRIAL_MODE: string; GLOBAL_TRIAL_PROGRAM: string; GLOBAL_TRIAL_YEAR: string; GLOBAL_TRIAL_YEARS: string; GLOBAL_TRIAL_FEATURES: string; GLOBAL_TRIAL_ENDS_AT: string;
+  // Read-only extras the server adds to GET/PATCH /admin/settings — JSON
+  // (TrialFeatureOption[]) and a number, both as strings like everything else here.
+  TRIAL_FEATURE_OPTIONS: string; BREVO_MAX_SLOTS: string;
+  PAYMENT_ACCOUNT_HOLDER: string; PAYMENT_ACCOUNT_NUMBER: string; PAYMENT_BANK_NAME: string; PAYMENT_IFSC_OR_ROUTING: string; PAYMENT_UPI_ID: string; PAYMENT_QR_CODE_PATH: string;
+  PAYMENT_RAAST_ID: string; PAYMENT_WALLET_PROVIDER: string; PAYMENT_WALLET_NUMBER: string; PAYMENT_WALLET_ACCOUNT_NAME: string;
+  PAYMENT_BANK_ACCOUNTS: string; PAYMENT_METHODS_CONFIG: string; PAYMENT_LATE_FEE_NOTE: string; PAYMENT_REFUND_POLICY: string;
+  SITE_FAVICON_PATH: string; SITE_FAVICON_URL: string; PAYMENT_QR_CODE_URL: string;
+  PLATFORM_DESCRIPTION: string; SOCIAL_FACEBOOK: string; SOCIAL_YOUTUBE: string; SOCIAL_LINKEDIN: string; SOCIAL_INSTAGRAM: string;
+  CONTACT_EMAIL: string; CONTACT_LOCATION: string; SUPPORT_HOURS: string; COPYRIGHT_NOTICE: string; FEATURES_LIST: string; QUICK_LINKS: string;
+  AI_PROVIDER: string; AI_API_KEY_SET: string; AI_API_KEY_MASKED: string; AI_API_KEY: string;
+  CLOUDINARY_CLOUD_NAME: string; CLOUDINARY_API_KEY: string; CLOUDINARY_API_SECRET: string; CLOUDINARY_API_SECRET_SET: string; CLOUDINARY_API_SECRET_MASKED: string;
+  CLOUDINARY_CONFIGURED: string;
+  EMAIL_PROVIDER: string; MAIL_FROM: string; MAIL_FROM_NAME: string;
+  BREVO_API_KEY: string; BREVO_API_KEY_SET: string; BREVO_API_KEY_MASKED: string;
+  BREVO_SLOT_STRATEGY: string;
+  SMTP_HOST: string; SMTP_PORT: string; SMTP_USER: string; SMTP_PASS: string; SMTP_PASS_SET: string; SMTP_PASS_MASKED: string;
+  CUSTOM_EMAIL_API_URL: string; CUSTOM_EMAIL_API_KEY: string; CUSTOM_EMAIL_API_KEY_SET: string; CUSTOM_EMAIL_API_KEY_MASKED: string;
+  CUSTOM_EMAIL_API_KEY_HEADER: string; CUSTOM_EMAIL_API_KEY_PREFIX: string;
+  EMAIL_CONFIGURED: string;
+  THEME_PRIMARY: string; THEME_SECONDARY: string; THEME_ACCENT: string;
+  THEME_BACKGROUND: string; THEME_CARD: string; THEME_TEXT: string; THEME_MODE: string;
+}
+
+export interface BankAccount { id: string; label: string; accountHolder: string; bankName: string; accountNumber: string; ifsc: string; branch: string; isPrimary: boolean }
+export interface PaymentMethodConfig { key: string; label: string; type: 'bank' | 'wallet' | 'card' | 'cash'; enabled: boolean; instructions: string; accountNumber?: string; accountName?: string }
+
+export interface AuditLogEntry { id: number; actorId: number | null; actorName: string; action: string; entity: string; entityId: number | null; metadata: string | null; createdAt: string }
+
+export interface StudentSummary { id: number; name: string; email: string; institution: string; program: string; status: string; joinedAt: string; progress: number }
+export interface StudentDetail {
+  id: number; name: string; email: string; phone: string | null; rollNumber: string | null; status: string; statusMessage: string | null; emailVerified: boolean;
+  institution: string | null; program: string | null; academicYear: string | null; batch: string | null;
+  institutionId?: number | null; programKind?: 'MDCAT' | 'BDS' | null; yearNumber?: number | null;
+  progress?: number; currentStreak: number; longestStreak: number; lastPracticeDate?: string | null; lastLoginAt: string | null; joinedAt: string;
+  payments: PaymentRow[]; activeMembership: { expiresAt: string; isTrial: boolean } | null;
+}
+export interface StudentChallengeRow {
+  id: number; role: 'challenger' | 'opponent'; opponent: { id: number; name: string } | null;
+  totalQuestions: number; status: 'PENDING' | 'DECLINED' | 'COMPLETED' | 'EXPIRED'; createdAt: string;
+  myScorePercent: number | null; opponentScorePercent: number | null; iHavePlayed: boolean;
+}
+export interface PaymentRow { id: number; studentName: string; institution: string; program: string; academicYear: string; batch: string; rollNumber: string; planName: string; amount: number; currency: string; method: string; reference: string; paymentDate: string; proofPath: string | null; status: string; submittedAt: string }
+export interface StudentDevice { id: number; label: string; ip: string | null; signedInAt: string; lastSeenAt: string }
+// limit = what applies now (0 = unlimited); override = this student's own setting (null = follows the platform default).
+export interface StudentDevices { limit: number; override: number | null; defaultLimit: number; devices: StudentDevice[] }
+export const STUDENT_STATUSES = ['UNVERIFIED', 'VERIFIED', 'PAYMENT_PENDING_REVIEW', 'ACTIVE', 'EXPIRED', 'SUSPENDED', 'REJECTED', 'DELETED'] as const;
+
+export interface McqImportProfile { id: number; name: string; questionPattern: string; optionPattern: string; answerPattern: string; explanationPattern: string; hintPattern?: string | null; referencePattern?: string | null; isDefault: boolean }
+// suggestedPath: only populated for tabular sources with recognizable
+// Block/Module/Subject/Topic-ish columns (an "enriched" export tagging
+// every question with its place in the curriculum) — see mcqParser.ts.
+// It's a suggestion only; no review UI reads/edits it yet and commit
+// doesn't act on it (no module/subject/topic gets created or matched from
+// it) — see AI_HANDOFF_ENRICHED_IMPORT.md for wiring this up.
+export interface McqCandidate { question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null; reference: string | null; hint: string | null; needsReview: boolean; rawBlock?: string; difficulty: 'easy' | 'moderate' | 'hard'; suggestedPath?: { block: string | null; module: string | null; subject: string | null; topic: string | null } | null }
+export interface McqParseResult { fileName: string; totalFound: number; needsReviewCount: number; candidates: McqCandidate[] }
+
+export interface FlashcardCandidate { front: string; back: string; needsReview: boolean; rawBlock?: string }
+export interface FlashcardParseResult { fileName: string; totalFound: number; needsReviewCount: number; candidates: FlashcardCandidate[] }
+
+// File-based flashcard import — same "upload, parse, review, commit" shape
+// as mcqImportApi, minus the configurable regex profiles (flashcards only
+// ever have a front/back, so there's nothing to customize a pattern for).
+export const flashcardImportApi = {
+  parse: async (file: File): Promise<FlashcardParseResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_ORIGIN}/api/admin/flashcard-import/parse`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not parse this file', data);
+    return data;
+  },
+  commit: (body: { moduleId: number; subjectId: number; topicId: number; module: string; topic: string; cards: FlashcardCandidate[] }) =>
+    request<{ imported: number; ids: number[] }>('/admin/flashcard-import/commit', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// Whole-bank backup/restore — the flashcard-side counterpart to
+// mcqBackupApi below. Export downloads every flashcard (every field) as
+// one JSON file, or (given a scope) just the cards under one
+// Year/Block/Module/Subject/Topic branch; import restores a file like it,
+// either alongside the existing bank or replacing it (a scoped backup's
+// "replace" only wipes that same branch first).
+export const flashcardBackupApi = {
+  exportUrl: () => `${API_BASE}/admin/flashcard-backup/export`,
+  // Not a plain <a href> download — same reasoning as mcqBackupApi's
+  // downloadBackup: needs the admin's session cookie and a real error
+  // message instead of a bare failed navigation if it fails.
+  downloadBackup: async (scope?: BackupScope | null): Promise<void> => {
+    const res = await fetchOrThrow(`${API_BASE}/admin/flashcard-backup/export?${backupScopeQuery(scope)}`, { credentials: 'include' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiRequestError(res.status, (data && data.error) || 'Could not download the backup', data);
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameMatch?.[1] || 'flashcard-bank-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  importBackup: async (file: File, mode: 'append' | 'replace'): Promise<{ restored: number; mode: 'append' | 'replace'; deletedFirst: number; scope: BackupScope | null }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/flashcard-backup/import?mode=${mode}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not restore this backup', data);
+    return data;
+  },
+};
+
+export const DEFAULT_IMPORT_PATTERNS = {
+  questionPattern: "^\\s*(?:Q\\.?\\s*)?(\\d{1,3})[\\.\\):]\\s+(.+)$",
+  optionPattern: "^\\s*\\(?([A-Da-d])\\)?[\\.\\):]\\s+(.+)$",
+  answerPattern: "^\\s*(?:Answer|Ans|Correct\\s*Answer|Key)\\s*[:\\-]\\s*\\(?([A-Da-d])\\)?",
+  explanationPattern: "^\\s*(?:Explanation|Rationale|Explain)\\s*[:\\-]\\s*(.+)$",
+  hintPattern: "^\\s*(?:Hint|Tip|Clue)\\s*[:\\-]\\s*(.+)$",
+  referencePattern: "^\\s*(?:Reference|Ref|Source|Citation)\\s*[:\\-]\\s*(.+)$",
+};
+
+export const TEAM_CATEGORIES = ['ownership', 'reviewer', 'question_setter'] as const;
+export type TeamCategory = typeof TEAM_CATEGORIES[number];
+export const TEAM_CATEGORY_LABELS: Record<TeamCategory, string> = { reviewer: 'Reviewers', question_setter: 'Question setters', ownership: 'Ownership' };
+export interface TeamMember { id: number; name: string; role: string; category: TeamCategory; bio: string; achievementBadge: string; photoPath: string | null; linkedinUrl: string; instagramUrl: string; email: string; active: boolean; displayOrder: number }
+export interface TrialFeatureOption { key: string; label: string; description: string; defaultOn: boolean }
+export interface TrialStatus { active: boolean; program: string; years: number[]; features: string[]; endsAt: string | null }
+export interface SiteContent {
+  // Resolved General Trial Mode state (defaults applied, end date honoured).
+  trial?: TrialStatus;
+  PLATFORM_NAME: string; PLATFORM_TAGLINE: string; PLATFORM_DESCRIPTION: string;
+  SEO_TITLE: string; SEO_DESCRIPTION: string;
+  SOCIAL_FACEBOOK: string; SOCIAL_YOUTUBE: string; SOCIAL_LINKEDIN: string; SOCIAL_INSTAGRAM: string;
+  CONTACT_EMAIL: string; CONTACT_LOCATION: string; SUPPORT_HOURS: string; COPYRIGHT_NOTICE: string;
+  features: string[]; quickLinks: Array<{ label: string; url: string }>; team: TeamMember[];
+  faviconUrl: string | null;
+  THEME_PRIMARY: string; THEME_SECONDARY: string; THEME_ACCENT: string;
+  THEME_BACKGROUND: string; THEME_CARD: string; THEME_TEXT: string; THEME_MODE: string;
+}
+
+export const siteContentApi = {
+  get: () => request<SiteContent>('/site-content'),
+};
+
+export const teamApi = {
+  listAll: () => request<TeamMember[]>('/admin/team-members'),
+  create: (body: Partial<TeamMember>) => request<TeamMember>('/admin/team-members', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<TeamMember>) => request<TeamMember>(`/admin/team-members/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/admin/team-members/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/admin/team-members/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export interface AdminModule { id: number; name: string; subtitle: string; subjectCount: number; topicCount: number; progress: number; active: boolean; blockId?: number | null; blockName?: string | null; displayOrder?: number; iconUrl?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; targetingLabel?: string }
+
+export const moduleAdminApi = {
+  listAll: () => request<AdminModule[]>('/modules'),
+  create: (body: { name: string; subtitle: string; active?: boolean; blockId?: number | null; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null }) =>
+    request<AdminModule>('/modules', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; blockId: number | null; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null }>) =>
+    request<AdminModule>(`/modules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/modules/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/modules/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export interface AdminBlock { id: number; name: string; subtitle: string; iconUrl: string | null; displayOrder: number; active: boolean; programTargetKind?: string | null; yearTargetNumber?: number | null; targetingLabel?: string }
+
+export const blockAdminApi = {
+  listAll: () => request<AdminBlock[]>('/blocks'),
+  create: (body: { name: string; subtitle?: string; active?: boolean; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null }) =>
+    request<AdminBlock>('/blocks', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null }>) =>
+    request<AdminBlock>(`/blocks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/blocks/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/blocks/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export interface Exam {
+  id: number; title: string; description: string; programTargetKind: string | null; yearTargetNumber: number | null;
+  durationMinutes: number; startAt: string; endAt: string; maxAttempts: number; negativeMarkingEnabled: boolean;
+  negativeMarkPerWrong: number; passingPercent: number | null; resultReleaseMode: 'immediate' | 'after_end' | 'manual';
+  showMarks: boolean; showPercentage: boolean; showCorrectAnswers: boolean; status: 'draft' | 'published' | 'archived';
+}
+export interface AdminExam extends Exam { questionCount: number; attemptCount: number }
+export interface StudentExam extends Exam { attemptsUsed: number; canStart: boolean; inProgressAttemptId: number | null; windowStatus: 'upcoming' | 'open' | 'closed' }
+export interface ExamQuestion { id: number; question: string; options: string[]; difficulty: string }
+export interface ExamStartResponse { attemptId: number; startedAt: string; durationMinutes: number; questions: ExamQuestion[] }
+export interface ExamAttemptRow { id: number; examId: number; userId: number; studentName: string; institution: string; attemptNumber: number; startedAt: string; submittedAt: string | null; totalQuestions: number; correctCount: number; wrongCount: number; unansweredCount: number; score: number; percentage: number; passed: boolean | null; status: string; resultsReleasedAt: string | null }
+export interface ExamResult {
+  released: boolean; status?: string; totalQuestions?: number; correctCount?: number; wrongCount?: number; unansweredCount?: number;
+  score?: number | null; percentage?: number | null; passed?: boolean | null;
+  breakdown?: Array<{ mcqId: number; question: string; options: string[]; selectedAnswer: string | null; correctAnswer: string | null; explanation: string | null; correct: boolean | null }>;
+}
+
+// ---------------------------------------------------------------------------
+// OSPE / OSCE practical exams
+// ---------------------------------------------------------------------------
+
+export type OspeExamType = 'OSPE' | 'OSCE';
+export interface OspeBlock {
+  id: number; name: string; subtitle: string; examType: OspeExamType; iconPath: string | null; active: boolean;
+  archived: boolean; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null; targetingLabel: string;
+}
+export interface OspeModule extends OspeBlock { blockId: number | null; blockName: string | null }
+export interface OspeLearningMaterial {
+  id: number; moduleId: number | null; blockId: number | null; examType: OspeExamType; title: string; description: string; bodyText: string;
+  imagePath: string | null; imageUrl?: string | null; attachmentPath: string | null; attachmentUrl?: string | null; externalUrl: string | null; active: boolean; archived: boolean;
+  displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null; targetingLabel: string;
+}
+export interface OspeLabelPoint { id: string; x: number; y: number; label: string; marks?: number | null }
+export interface OspeStation {
+  id: number; moduleId: number | null; blockId: number | null; examType: OspeExamType; title: string; instructions: string; imagePath: string | null; imageUrl?: string | null;
+  attachmentPath: string | null; attachmentUrl?: string | null; answerType: 'MCQ' | 'WRITTEN' | 'LABELING'; options: string[] | null; correctAnswer: string | null;
+  modelAnswer: string | null; labelPoints: OspeLabelPoint[] | null; marks: number; timeLimitSeconds: number | null; active: boolean; archived: boolean;
+  displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null; targetingLabel: string;
+}
+export interface OspeExam {
+  id: number; title: string; description: string; examType: OspeExamType; programTargetKind: string | null; yearTargetNumber: number | null;
+  durationMinutes: number; startAt: string; endAt: string; maxAttempts: number; passingPercent: number | null;
+  resultReleaseMode: 'immediate' | 'after_end' | 'manual'; showMarks: boolean; showPercentage: boolean; showCorrectAnswers: boolean;
+  status: 'draft' | 'published' | 'archived';
+}
+export interface OspeAdminExam extends OspeExam { stationCount: number; attemptCount: number }
+export interface OspeStudentExam extends OspeExam { attemptsUsed: number; canStart: boolean; inProgressAttemptId: number | null; windowStatus: 'upcoming' | 'open' | 'closed' }
+export interface OspeExamStation { id: number; title: string; instructions: string; imagePath: string | null; imageUrl?: string | null; attachmentPath: string | null; attachmentUrl?: string | null; answerType: 'MCQ' | 'WRITTEN' | 'LABELING'; options: string[] | null; labelPoints: Array<{ id: string; x: number; y: number }> | null; marks: number; timeLimitSeconds: number | null }
+export interface OspeExamStartResponse { attemptId: number; startedAt: string; durationMinutes: number; stations: OspeExamStation[] }
+export interface OspeExamAttemptRow { id: number; examId: number; userId: number; studentName: string; institution: string; attemptNumber: number; startedAt: string; submittedAt: string | null; totalStations: number; totalMarks: number; obtainedMarks: number; percentage: number; passed: boolean | null; status: string; resultsReleasedAt: string | null }
+export interface OspeExamResult {
+  released: boolean; status?: string; totalStations?: number; fullyGraded?: boolean;
+  totalMarks?: number; obtainedMarks?: number | null; percentage?: number | null; passed?: boolean | null;
+  breakdown?: Array<{
+    stationId: number; title: string; instructions: string; imagePath: string | null; imageUrl?: string | null; answerType: 'MCQ' | 'WRITTEN' | 'LABELING'; options: string[] | null;
+    selectedAnswer: string | null; writtenAnswer: string | null; correctAnswer: string | null; modelAnswer: string | null;
+    labelPoints: OspeLabelPoint[] | null; labelAnswers: Record<string, string> | null;
+    marks: number; marksObtained: number | null; correct: boolean | null; aiVerdict: 'correct' | 'partial' | 'incorrect' | null; aiFeedback: string | null;
+  }>;
+}
+
+function ospeQuery(examType?: OspeExamType) { return examType ? `?examType=${examType}` : ''; }
+
+export const ospeAdminApi = {
+  blocks: {
+    list: (examType?: OspeExamType) => request<OspeBlock[]>(`/admin/ospe/blocks${ospeQuery(examType)}`),
+    create: (body: Partial<OspeBlock>) => request<OspeBlock>('/admin/ospe/blocks', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: Partial<OspeBlock>) => request<OspeBlock>(`/admin/ospe/blocks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archive: (id: number) => request<{ ok: true }>(`/admin/ospe/blocks/${id}`, { method: 'DELETE' }),
+    removePermanent: (id: number) => request<{ ok: true }>(`/admin/ospe/blocks/${id}/permanent`, { method: 'DELETE' }),
+  },
+  modules: {
+    list: (examType?: OspeExamType) => request<OspeModule[]>(`/admin/ospe/modules${ospeQuery(examType)}`),
+    create: (body: Partial<OspeModule>) => request<OspeModule>('/admin/ospe/modules', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: Partial<OspeModule>) => request<OspeModule>(`/admin/ospe/modules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archive: (id: number) => request<{ ok: true }>(`/admin/ospe/modules/${id}`, { method: 'DELETE' }),
+    removePermanent: (id: number) => request<{ ok: true }>(`/admin/ospe/modules/${id}/permanent`, { method: 'DELETE' }),
+  },
+  learningMaterials: {
+    list: (examType?: OspeExamType) => request<OspeLearningMaterial[]>(`/admin/ospe/learning-materials${ospeQuery(examType)}`),
+    create: (body: Partial<OspeLearningMaterial>) => request<OspeLearningMaterial>('/admin/ospe/learning-materials', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: Partial<OspeLearningMaterial>) => request<OspeLearningMaterial>(`/admin/ospe/learning-materials/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archive: (id: number) => request<{ ok: true }>(`/admin/ospe/learning-materials/${id}`, { method: 'DELETE' }),
+    removePermanent: (id: number) => request<{ ok: true }>(`/admin/ospe/learning-materials/${id}/permanent`, { method: 'DELETE' }),
+  },
+  stations: {
+    list: (examType?: OspeExamType) => request<OspeStation[]>(`/admin/ospe/stations${ospeQuery(examType)}`),
+    create: (body: Partial<OspeStation>) => request<OspeStation>('/admin/ospe/stations', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: Partial<OspeStation>) => request<OspeStation>(`/admin/ospe/stations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archive: (id: number) => request<{ ok: true }>(`/admin/ospe/stations/${id}`, { method: 'DELETE' }),
+    removePermanent: (id: number) => request<{ ok: true }>(`/admin/ospe/stations/${id}/permanent`, { method: 'DELETE' }),
+  },
+  exams: {
+    list: (examType?: OspeExamType) => request<OspeAdminExam[]>(`/admin/ospe/exams${ospeQuery(examType)}`),
+    create: (body: Partial<OspeExam>) => request<OspeExam>('/admin/ospe/exams', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: number, body: Partial<OspeExam>) => request<OspeExam>(`/admin/ospe/exams/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archive: (id: number) => request<{ ok: true }>(`/admin/ospe/exams/${id}`, { method: 'DELETE' }),
+    removePermanent: (id: number, force?: boolean) => request<{ ok: true }>(`/admin/ospe/exams/${id}/permanent${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+    setStations: (id: number, stationIds: number[]) => request<{ ok: true; count: number }>(`/admin/ospe/exams/${id}/stations`, { method: 'POST', body: JSON.stringify({ stationIds }) }),
+    getStations: (id: number) => request<Array<OspeStation & { examStationOrder: number }>>(`/admin/ospe/exams/${id}/stations`),
+    attempts: (id: number) => request<OspeExamAttemptRow[]>(`/admin/ospe/exams/${id}/attempts`),
+    releaseOne: (attemptId: number) => request<{ ok: true }>(`/admin/ospe/exam-attempts/${attemptId}/release`, { method: 'POST' }),
+    releaseAll: (examId: number) => request<{ ok: true }>(`/admin/ospe/exams/${examId}/release-all`, { method: 'POST' }),
+  },
+};
+
+export const ospeApi = {
+  blocks: (examType?: OspeExamType) => request<Array<{ id: number; name: string; subtitle: string; examType: OspeExamType; displayOrder: number }>>(`/ospe/blocks${ospeQuery(examType)}`),
+  modules: (examType?: OspeExamType, blockId?: number) => request<Array<{ id: number; name: string; subtitle: string; examType: OspeExamType; blockId: number | null; displayOrder: number }>>(`/ospe/modules${examType || blockId ? `?${[examType ? `examType=${examType}` : '', blockId ? `blockId=${blockId}` : ''].filter(Boolean).join('&')}` : ''}`),
+  learningMaterials: (examType?: OspeExamType, moduleId?: number) => request<Array<Omit<OspeLearningMaterial, 'active' | 'archived' | 'displayOrder' | 'programTargetKind' | 'yearTargetNumber' | 'targetingLabel'>>>(`/ospe/learning-materials${examType || moduleId ? `?${[examType ? `examType=${examType}` : '', moduleId ? `moduleId=${moduleId}` : ''].filter(Boolean).join('&')}` : ''}`),
+  exams: (examType?: OspeExamType) => request<OspeStudentExam[]>(`/ospe/exams${ospeQuery(examType)}`),
+  start: (id: number) => request<OspeExamStartResponse>(`/ospe/exams/${id}/start`, { method: 'POST' }),
+  answer: (attemptId: number, stationId: number, selectedAnswer: string | null, writtenAnswer: string | null) =>
+    request<{ ok: true }>(`/ospe/exam-attempts/${attemptId}/answer`, { method: 'POST', body: JSON.stringify({ stationId, selectedAnswer, writtenAnswer }) }),
+  submit: (attemptId: number) => request<{ attemptId: number; status: string; resultsReleased: boolean }>(`/ospe/exam-attempts/${attemptId}/submit`, { method: 'POST' }),
+  // Retries AI grading for any WRITTEN stations still ungraded (e.g. the
+  // first pass at submit time ran out of its time budget) — safe to call
+  // repeatedly, already-graded stations are skipped server-side.
+  grade: (attemptId: number) => request<{ ok: true; graded: number; pending: number; obtainedMarks: number; percentage: number }>(`/ospe/exam-attempts/${attemptId}/grade`, { method: 'POST' }),
+  result: (attemptId: number) => request<OspeExamResult>(`/ospe/exam-attempts/${attemptId}/result`),
+};
+
+export type ExplanationStatus = 'PENDING' | 'AI_GENERATED' | 'REVIEWED' | 'APPROVED';
+export interface ExplanationSummary { PENDING: number; AI_GENERATED: number; REVIEWED: number; APPROVED: number }
+
+export const explanationsApi = {
+  summary: () => request<ExplanationSummary>('/admin/mcqs/explanations/summary'),
+  listByStatus: (status: ExplanationStatus) => request<Array<{ id: number; question: string; explanation: string | null; explanationStatus: ExplanationStatus; moduleId: number }>>(`/admin/mcqs/explanations?status=${status}`),
+  setStatus: (id: number, status: ExplanationStatus) => request<{ id: number }>(`/admin/mcqs/${id}/explanation-status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  reject: (id: number) => request<{ id: number }>(`/admin/mcqs/${id}/reject-explanation`, { method: 'POST' }),
+  generate: (id: number) => request<{ id: number; explanation: string }>(`/admin/mcqs/${id}/generate-explanation`, { method: 'POST' }),
+  bulkGenerate: (body: { moduleId?: number; mcqIds?: number[]; limit?: number }) => request<{ generated: number; failed: number; errors: Array<{ id: number; error: string }> }>('/admin/mcqs/bulk-generate-explanations', { method: 'POST', body: JSON.stringify(body) }),
+  askAi: (mcqId: number) => request<{ explanation: string }>(`/mcqs/${mcqId}/ask-ai`, { method: 'POST' }),
+};
+
+export interface GeneratedFlashcard { front: string; back: string }
+export const flashcardsAiApi = {
+  generate: (body: { topicId?: number; sourceText?: string; count?: number }) => request<{ drafts: GeneratedFlashcard[] }>('/admin/flashcards/generate', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+export const examsAdminApi = {
+  list: () => request<AdminExam[]>('/admin/exams'),
+  create: (body: Partial<Exam>) => request<Exam>('/admin/exams', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<Exam>) => request<Exam>(`/admin/exams/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archive: (id: number) => request<{ ok: true }>(`/admin/exams/${id}`, { method: 'DELETE' }),
+  // `force` re-sends the delete after the backend's first refusal (an exam
+  // with recorded attempts) to also wipe those attempts/results — see
+  // AdminExams' two-step confirm dialog, which only sends force=true once
+  // the admin has seen and accepted that extra warning.
+  removePermanent: (id: number, force?: boolean) => request<{ ok: true }>(`/admin/exams/${id}/permanent${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+  setQuestions: (id: number, mcqIds: number[]) => request<{ ok: true; count: number }>(`/admin/exams/${id}/questions`, { method: 'POST', body: JSON.stringify({ mcqIds }) }),
+  getQuestions: (id: number) => request<Array<{ id: number; question: string; options: string[]; correctAnswer: string | null; module: string; subject: string; topic: string }>>(`/admin/exams/${id}/questions`),
+  attempts: (id: number) => request<ExamAttemptRow[]>(`/admin/exams/${id}/attempts`),
+  releaseOne: (attemptId: number) => request<{ ok: true }>(`/admin/exam-attempts/${attemptId}/release`, { method: 'POST' }),
+  releaseAll: (examId: number) => request<{ ok: true }>(`/admin/exams/${examId}/release-all`, { method: 'POST' }),
+};
+
+export const examsApi = {
+  list: () => request<StudentExam[]>('/exams'),
+  start: (id: number) => request<ExamStartResponse>(`/exams/${id}/start`, { method: 'POST' }),
+  answer: (attemptId: number, mcqId: number, selectedAnswer: string | null) => request<{ ok: true }>(`/exam-attempts/${attemptId}/answer`, { method: 'POST', body: JSON.stringify({ mcqId, selectedAnswer }) }),
+  submit: (attemptId: number) => request<{ attemptId: number; status: string; resultsReleased: boolean }>(`/exam-attempts/${attemptId}/submit`, { method: 'POST' }),
+  result: (attemptId: number) => request<ExamResult>(`/exam-attempts/${attemptId}/result`),
+};
+
+export const studentsAdminApi = {
+  detail: (id: number) => request<StudentDetail>(`/students/${id}`),
+  challenges: (id: number) => request<{ sent: StudentChallengeRow[]; received: StudentChallengeRow[] }>(`/students/${id}/challenges`),
+  update: (id: number, body: Partial<{ name: string; email: string; phone: string; rollNumber: string; institutionId: number; programKind: 'MDCAT' | 'BDS'; yearNumber: number }>) => request<{ ok: true }>(`/students/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  updateStatus: (id: number, status: string, emailVerified?: boolean, message?: string) => request<{ ok: true; status: string; emailVerified: boolean; statusMessage: string | null }>(`/students/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, ...(emailVerified !== undefined ? { emailVerified } : {}), ...(message !== undefined ? { message } : {}) }) }),
+  verifyEmail: (id: number) => request<{ ok: true; status: string; emailVerified: boolean }>(`/students/${id}/verify-email`, { method: 'POST' }),
+  restoreStreak: (id: number, body: { mode: 'rebuild' } | { mode: 'set'; currentStreak: number; longestStreak?: number }) => request<{ ok: true; currentStreak: number; longestStreak: number; lastPracticeDate: string | null }>(`/students/${id}/streak/restore`, { method: 'POST', body: JSON.stringify(body) }),
+  startTrial: (id: number, durationDays: number) => request<{ ok: true; expiresAt: string }>(`/students/${id}/trial`, { method: 'POST', body: JSON.stringify({ durationDays }) }),
+  endTrial: (id: number) => request<{ ok: true }>(`/students/${id}/trial`, { method: 'DELETE' }),
+  devices: (id: number) => request<StudentDevices>(`/students/${id}/devices`),
+  setDeviceLimit: (id: number, maxDevices: number | null) => request<{ ok: true; limit: number; override: number | null }>(`/students/${id}/device-limit`, { method: 'PATCH', body: JSON.stringify({ maxDevices }) }),
+  revokeDevice: (id: number, sessionId: number) => request<{ ok: true }>(`/students/${id}/devices/${sessionId}`, { method: 'DELETE' }),
+  revokeAllDevices: (id: number) => request<{ ok: true; revoked: number }>(`/students/${id}/devices`, { method: 'DELETE' }),
+  remove: (id: number) => request<{ ok: true }>(`/students/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/students/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export interface AdminSearchResult { id: number; title: string; subtitle?: string; status?: string }
+export interface AdminSearchResponse {
+  students: AdminSearchResult[]; mcqs: AdminSearchResult[]; modules: AdminSearchResult[];
+  subjects: AdminSearchResult[]; topics: AdminSearchResult[]; exams: AdminSearchResult[]; pastPapers: AdminSearchResult[];
+}
+export const adminSearchApi = {
+  search: (q: string) => request<AdminSearchResponse>(`/admin/search?q=${encodeURIComponent(q)}`),
+};
+
+export const paymentsAdminApi = {
+  remove: (id: number) => request<{ ok: true }>(`/payments/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/payments/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export const membershipPlansAdminApi = {
+  remove: (id: number) => request<{ ok: true }>(`/membership-plans/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/membership-plans/${id}/permanent`, { method: 'DELETE' }),
+};
+
+export interface AdminMcqRow {
+  id: number; question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null;
+  explanationStatus: ExplanationStatus; reference: string | null; difficulty: string; tags: string[]; imagePath: string | null;
+  status: string; source: string; moduleId: number | null; subjectId: number | null; topicId: number | null; pastPaperId: number | null; examId: number | null;
+  createdAt: string; updatedAt: string;
+  /** Where the question is filed (GET /admin/mcqs adds this). */
+  path?: McqPath;
+}
+export interface McqPath { program: string | null; year: number | null; blockId: number | null; block: string | null; module: string | null; subject: string | null; topic: string | null }
+/** Source tag the student AI MCQ Maker gives the questions it files into the Qbank. */
+export const STUDENT_AI_SOURCE = 'student_ai';
+// A 20,000-row request returned 503 on the host (the response is too big / slow for the
+// serverless gateway), so the bank is pulled in moderate pages, a few pages at a time in
+// parallel. If a page still fails, the page size is halved automatically and it retries.
+export const MCQ_BATCH_SIZE = 1500;
+const MCQ_MIN_BATCH = 250;
+const MCQ_PARALLEL_PAGES = 3;
+async function loadMcqBankInBatches(onBatch?: (soFar: AdminMcqRow[], done: boolean) => void): Promise<AdminMcqRow[]> {
+  const all: AdminMcqRow[] = [];
+  const seen = new Set<number>();
+  let size = MCQ_BATCH_SIZE;
+  let failsAtMin = 0;
+  let finished = false;
+  while (!finished) {
+    const start = all.length; // rows are in a stable order, so "rows so far" is the next offset
+    const settled = await Promise.allSettled(
+      Array.from({ length: MCQ_PARALLEL_PAGES }, (_, i) => mcqAdminApi.listPage(start + i * size, size)),
+    );
+    let failed = false;
+    for (const r of settled) {
+      if (r.status === 'rejected') { failed = true; break; }
+      for (const row of r.value) if (!seen.has(row.id)) { seen.add(row.id); all.push(row); }
+      if (r.value.length < size) { finished = true; break; }
+    }
+    if (failed && !finished) {
+      if (size > MCQ_MIN_BATCH) { size = Math.max(MCQ_MIN_BATCH, Math.floor(size / 2)); }
+      else if (++failsAtMin >= 3) {
+        if (all.length) { onBatch?.(all, true); return all; }
+        throw new Error('Could not load the MCQ bank');
+      }
+    }
+    if (!finished) onBatch?.([...all], false);
+  }
+  onBatch?.(all, true);
+  return all;
+}
+
+export const mcqAdminApi = {
+  remove: (id: number) => request<{ ok: true }>(`/mcqs/${id}`, { method: 'DELETE' }),
+  // One page of the bank (see GET /admin/mcqs ?limit=&offset=).
+  listPage: (offset: number, limit: number) => request<AdminMcqRow[]>(`/admin/mcqs?limit=${limit}&offset=${offset}`),
+  // Whole bank, fetched batch by batch (MCQ_BATCH_SIZE at a time) instead of
+  // one giant request that times out / returns nothing on a big bank.
+  // `onBatch` receives everything loaded so far after each batch so the UI
+  // can show questions while the rest is still arriving.
+  list: (onBatch?: (soFar: AdminMcqRow[], done: boolean) => void): Promise<AdminMcqRow[]> => loadMcqBankInBatches(typeof onBatch === 'function' ? onBatch : undefined),
+  // Use as `queryFn` for ['admin-mcqs-tree']: same as list() but writes each
+  // batch into the query cache as it lands, so the tree fills in progressively.
+  treeQueryFn: () => loadMcqBankInBatches((soFar, done) => { if (!done) queryClient.setQueryData(['admin-mcqs-tree'], soFar); }),
+  publish: (id: number) => request<AdminMcqRow>(`/mcqs/${id}/publish`, { method: 'POST' }),
+  update: (id: number, body: Partial<{ question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null; reference: string | null; difficulty: string; status: string; moduleId: number; subjectId: number; topicId: number }>) =>
+    request<AdminMcqRow>(`/mcqs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  bulkRemove: (body: { ids: number[] } | { all: true; filters?: { search?: string; moduleId?: number; subjectId?: number; topicId?: number; difficulty?: string } }) =>
+    request<{ ok: true; deleted: number }>('/admin/mcqs/bulk', { method: 'DELETE', body: JSON.stringify(body) }),
+  bulkCreate: (mcqs: Array<Partial<AdminMcqRow> & { question: string; options: string[] }>) =>
+    request<{ ok: true; created: number; mcqs: AdminMcqRow[] }>('/admin/mcqs/bulk', { method: 'POST', body: JSON.stringify({ mcqs }) }),
+  generateAi: (topicId: number, count: number, difficulty?: 'easy' | 'moderate' | 'hard') =>
+    request<{ drafts: Array<{ question: string; options: string[]; correctAnswer: string; explanation: string; optionExplanations?: (string | null)[]; difficulty?: string }>; topicLabel: string }>('/admin/mcqs/generate', { method: 'POST', body: JSON.stringify({ topicId, count, difficulty }) }),
+  // AI-reclassifies difficulty for existing questions (easy/moderate/hard).
+  // Each call is still capped server-side (see CLASSIFY_BATCH_CAP) so a
+  // single request can't run long enough to hit a hosting gateway timeout
+  // — pass {all:true, filters} for a scope, {ids} for an explicit batch.
+  // Returns how many are still left in that scope; callers that want the
+  // *whole* scope done should call this again while `remaining > 0` (the
+  // AnalysisPanel button in shared.tsx does this loop automatically).
+  classifyDifficulty: (body: { ids: number[] } | { all: true; filters?: { moduleId?: number; subjectId?: number; topicId?: number; pastPaperId?: number } }) =>
+    request<{ classified: number; remaining: number; results: Array<{ id: number; difficulty: 'easy' | 'moderate' | 'hard' }> }>('/admin/mcqs/classify-difficulty', { method: 'POST', body: JSON.stringify(body) }),
+  // AI-backfills optionExplanations for existing questions that are
+  // missing them (or have an incomplete set). Same capped-per-call /
+  // {ids} / {all, filters} shape as classifyDifficulty above — a bank of
+  // 100+ questions is worked through by calling this repeatedly while
+  // `remaining > 0` (handled automatically by the AnalysisPanel button in
+  // shared.tsx). Skips questions that already have a full set of
+  // per-option explanations rather than overwriting them.
+  generateOptionExplanations: (body: { ids: number[] } | { all: true; filters?: { moduleId?: number; subjectId?: number; topicId?: number; pastPaperId?: number } }) =>
+    request<{ generated: number; remaining: number; results: Array<{ id: number; optionExplanations: string[] }> }>('/admin/mcqs/generate-option-explanations', { method: 'POST', body: JSON.stringify(body) }),
+  // One-click fix for the "imported 406, module only shows 380" gap — see
+  // mcq-import.ts's CommitBody.status comment. Omit moduleId to publish
+  // every draft in the whole bank.
+  publishDrafts: (moduleId?: number) => request<{ ok: true; published: number }>('/admin/mcqs/publish-drafts', { method: 'PATCH', body: JSON.stringify({ moduleId }) }),
+  // See POST /admin/mcqs/shuffle-options — randomly reorders each
+  // question's options (and any per-option explanations, in lockstep)
+  // without touching which option is marked correct. Fixes banks (e.g.
+  // bulk-imported from an AI generator) where the correct answer is
+  // always the same letter.
+  // Mixes the order of the questions themselves (POST /admin/mcqs/shuffle-sequence).
+  shuffleSequence: (ids: number[]) =>
+    request<{ ok: true; shuffled: number }>('/admin/mcqs/shuffle-sequence', { method: 'POST', body: JSON.stringify({ ids }) }),
+  shuffleOptions: (body: { ids: number[] } | { all: true; filters?: { search?: string; moduleId?: number; subjectId?: number; topicId?: number; difficulty?: string; pastPaperId?: number } }) =>
+    request<{ ok: true; shuffled: number; skipped: number }>('/admin/mcqs/shuffle-options', { method: 'POST', body: JSON.stringify(body) }),
+  // "AI Fix All" (Content Quality Center): rewrites the second question in
+  // each near-duplicate pair so it's no longer a near-copy of the first,
+  // keeping the same tested fact and correct answer. Capped at 20 pairs per
+  // call (server enforces this too) so a bank with many duplicates is
+  // cleared over several calls rather than one that risks a gateway timeout.
+  dedupeBatch: (pairs: Array<{ id: number; otherId: number }>) =>
+    request<{ fixed: number; results: Array<{ id: number; rewritten: boolean; reason?: string; stillSimilar?: boolean; question?: string; options?: string[]; correctAnswer?: string }> }>('/admin/mcqs/dedupe-batch', { method: 'POST', body: JSON.stringify({ pairs }) }),
+  // "AI Fix" for the Invalid stat/list: repairs empty questions, too-few or
+  // duplicate options, and missing/mismatched correct answers. Capped at 20
+  // items per call (server enforces this too), same reasoning as dedupeBatch.
+  repairInvalidBatch: (items: Array<{ id: number; reasons: string[] }>) =>
+    request<{ fixed: number; results: Array<{ id: number; fixed: boolean }> }>('/admin/mcqs/repair-invalid-batch', { method: 'POST', body: JSON.stringify({ items }) }),
+  // "AI Fix" for the "No reference" stat/list: generates a short textbook/
+  // source citation for questions that don't have one yet. Same 20-per-call
+  // cap and reasoning as repairInvalidBatch above.
+  referenceBatch: (ids: number[]) =>
+    request<{ fixed: number; results: Array<{ id: number; fixed: boolean }> }>('/admin/mcqs/reference-batch', { method: 'POST', body: JSON.stringify({ ids }) }),
+};
+
+export const mcqImportApi = {
+  profiles: () => request<McqImportProfile[]>('/admin/mcq-import-profiles'),
+  createProfile: (body: Omit<McqImportProfile, 'id'>) => request<McqImportProfile>('/admin/mcq-import-profiles', { method: 'POST', body: JSON.stringify(body) }),
+  updateProfile: (id: number, body: Partial<Omit<McqImportProfile, 'id'>>) => request<McqImportProfile>(`/admin/mcq-import-profiles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProfile: (id: number) => request<{ ok: true }>(`/admin/mcq-import-profiles/${id}`, { method: 'DELETE' }),
+  parse: async (file: File, profileId?: number): Promise<McqParseResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    if (profileId) form.append('profileId', String(profileId));
+    const res = await fetchOrThrow(`${API_ORIGIN}/api/admin/mcq-import/parse`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not parse this file', data);
+    return data;
+  },
+  commit: (body: { moduleId?: number; subjectId?: number; topicId?: number; pastPaperId?: number; examId?: number; status: 'draft' | 'published'; mcqs: McqCandidate[] }) =>
+    request<{ imported: number; ids: number[] }>('/admin/mcq-import/commit', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// Narrows a whole-bank backup export down to one branch of the curriculum
+// tree — mirrors the server's BackupScope (backupScope.ts). `id` is the
+// block/module/subject/topic's row id, or the academic year number (1-5)
+// itself for level 'year'. `label` is only for the filename/UI.
+// Level 'program' = every year of one program (id is unused, 0). Level 'year'
+// may also carry a `program` so "Year 2" can mean "MDCAT Year 2". 'SHARED' is
+// content with no program targeting (visible to MDCAT alike).
+export type BackupProgram = 'MDCAT' | 'BDS' | 'SHARED';
+export interface BackupScope { level: 'program' | 'year' | 'block' | 'module' | 'subject' | 'topic'; id: number; label: string; program?: BackupProgram }
+function backupScopeQuery(scope?: BackupScope | null): string {
+  if (!scope) return '';
+  return `scopeLevel=${encodeURIComponent(scope.level)}&scopeId=${scope.id}&scopeLabel=${encodeURIComponent(scope.label)}${scope.program ? `&scopeProgram=${scope.program}` : ''}`;
+}
+
+// Whole-bank backup/restore — separate from mcqImportApi's file parser
+// above. Export downloads every MCQ (every field, across the main tree,
+// past papers, and exams) as one JSON file, or (given a scope) just the
+// questions under one Year/Block/Module/Subject/Topic branch; import
+// restores a file like it, either alongside the existing bank or replacing
+// it (a scoped backup's "replace" only wipes that same branch first).
+export type McqRestoreMode = 'merge' | 'append' | 'replace';
+interface NodeStat { created: number; reused: number }
+// What a restore did (or, for previewBackup, what it WOULD do). `legacy` files
+// are pre-structure (v1) backups: questions only, restored by raw ids.
+export interface McqRestoreResult {
+  legacy: boolean;
+  mode: McqRestoreMode;
+  scope: BackupScope | null;
+  restored?: number;
+  deletedFirst: number;
+  dryRun?: boolean;
+  structure?: { blocks: NodeStat; modules: NodeStat; subjects: NodeStat; topics: NodeStat; pastPapers: NodeStat; exams: NodeStat };
+  questions?: { inBackup: number; restored: number; skippedExisting?: number; skippedMissingLink?: number; detachedLinks?: number };
+  examLinks?: number;
+  warnings?: string[];
+}
+export interface McqBackupCounts { questions: number; blocks: number; modules: number; subjects: number; topics: number; pastPapers: number; exams: number }
+
+export interface PastPaperRestoreResult {
+  mode: 'append' | 'replace';
+  pastPapersRestored: number;
+  mcqsRestored: number;
+  pastPapersReplaced: number;
+  mcqsDeleted: number;
+  mcqsSkippedNoPaper: number;
+  tablesPrepared: boolean;
+  source: 'past-papers' | 'database-backup';
+}
+
+// Past papers have their own backup/restore (separate from the MCQ bank).
+export const pastPaperBackupApi = {
+  downloadBackup: async (paperId?: number | null): Promise<void> => {
+    const res = await fetchOrThrow(`${API_BASE}/admin/past-paper-backup/export${paperId ? `?paperId=${paperId}` : ''}`, { credentials: 'include' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiRequestError(res.status, (data && data.error) || 'Could not download the backup', data);
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameMatch?.[1] || 'past-papers-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  importBackup: async (file: File, mode: 'append' | 'replace'): Promise<PastPaperRestoreResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/past-paper-backup/import?mode=${mode}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not restore this backup', data);
+    return data;
+  },
+};
+
+export const mcqBackupApi = {
+  exportUrl: () => `${API_BASE}/admin/mcq-backup/export`,
+  // Not a plain <a href> download because it needs the admin's session
+  // cookie (credentials: 'include') and a nicer error than a bare failed
+  // navigation if the export fails — fetch it as a blob and trigger the
+  // save ourselves. Resolves with what went into the file (for the toast).
+  downloadBackup: async (scope?: BackupScope | null): Promise<{ filename: string; counts: McqBackupCounts | null }> => {
+    const res = await fetchOrThrow(`${API_BASE}/admin/mcq-backup/export?${backupScopeQuery(scope)}`, { credentials: 'include' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiRequestError(res.status, (data && data.error) || 'Could not download the backup', data);
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    let counts: McqBackupCounts | null = null;
+    try { counts = JSON.parse(res.headers.get('x-backup-counts') || 'null'); } catch { counts = null; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const filename = filenameMatch?.[1] || 'mcq-bank-backup.json';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return { filename, counts };
+  },
+  // Dry run: same matching as the real restore, nothing written. Powers the
+  // confirmation dialog ("3 modules will be created, 412 questions added…").
+  previewBackup: async (file: File, mode: McqRestoreMode): Promise<McqRestoreResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/mcq-backup/preview?mode=${mode}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not check this backup', data);
+    return data;
+  },
+  importBackup: async (file: File, mode: McqRestoreMode): Promise<McqRestoreResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/mcq-backup/import?mode=${mode}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not restore this backup', data);
+    return data;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Whole-database backup/restore — every application table (see
+// lib/fullBackup.ts on the backend), not just the MCQ bank. "content" is
+// curriculum + platform config (no student data); "users" is every
+// student's account + activity, exported separately since it's a bigger
+// deal to restore/share; "full" is both together, in one file — the single-
+// download migration path (PostgreSQL/Supabase -> a fresh PostgreSQL/
+// Supabase database).
+// ---------------------------------------------------------------------------
+
+export type FullBackupScope = 'content' | 'users' | 'full';
+
+export interface FullBackupValidation {
+  valid: boolean;
+  scope: FullBackupScope | null;
+  exportedAt: string | null;
+  counts: Record<string, number>;
+  issues: Array<{ level: 'error' | 'warning'; message: string }>;
+  targetHasExistingData: boolean;
+}
+
+export interface FullBackupRestoreResult {
+  scope: FullBackupScope;
+  mode: 'restore-empty' | 'wipe-and-restore';
+  restored: Record<string, number>;
+  wipedFirst: Record<string, number>;
+  // Rows dropped because a required reference (e.g. a module's blockId)
+  // didn't resolve within the restore — see lib/fullBackup.ts. Non-empty
+  // here means the restore "succeeded" but some data didn't come back.
+  dropped: Record<string, number>;
+  // Optional links cleared because the thing they pointed at wasn't in the
+  // backup, keyed "table.column" (e.g. "mcqs.pastPaperId").
+  nulledRefs?: Record<string, number>;
+}
+
+export interface PastPaperRelinkResult {
+  papersInBackup: number;
+  papersRecreated: number;
+  mcqsWithPaperInBackup: number;
+  mcqsRelinked: number;
+  mcqsAlreadyLinked: number;
+  mcqsNotMatched: number;
+}
+
+export interface SavedMcqRestoreResult { dryRun: boolean; savedInBackup: number; total: number; restored: number; alreadySaved: number; noMatch: number; approximate: number; missingStudents: number }
+
+export const fullBackupApi = {
+  // Same "fetch as a blob with credentials, trigger the save ourselves"
+  // pattern as mcqBackupApi.downloadBackup above — a plain <a href> can't
+  // carry the admin's session cookie.
+  downloadBackup: async (scope: FullBackupScope): Promise<void> => {
+    const res = await fetchOrThrow(`${API_BASE}/admin/full-backup/export?scope=${scope}`, { credentials: 'include' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiRequestError(res.status, (data && data.error) || 'Could not download the backup', data);
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameMatch?.[1] || `mdcatproffs-${scope}-backup.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  // Dry run — parses and checks the file, never writes anything. Used to
+  // populate the confirmation screen before the admin commits to a restore.
+  validate: async (file: File): Promise<FullBackupValidation> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/full-backup/validate`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not validate this backup', data);
+    return data;
+  },
+  importBackup: async (file: File, mode: 'restore-empty' | 'wipe-and-restore'): Promise<FullBackupRestoreResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/full-backup/import?mode=${mode}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not restore this backup', data);
+    return data;
+  },
+  // Repair: give students their Saved MCQs back from an older full backup (dryRun only counts).
+  restoreSavedMcqs: async (file: File, dryRun: boolean): Promise<SavedMcqRestoreResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/full-backup/restore-saved-mcqs${dryRun ? '?dryRun=1' : ''}`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not restore the saved MCQs', data);
+    return data;
+  },
+  // Repair: re-attach MCQs to their past papers from the original backup file.
+  relinkPastPapers: async (file: File): Promise<PastPaperRelinkResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchOrThrow(`${API_BASE}/admin/full-backup/relink-past-papers`, { method: 'POST', credentials: 'include', body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not repair the past paper links', data);
+    return data;
+  },
+};
+
+// The MySQL-target restore option (routes/full-backup-mysql.ts on the
+// backend) has been removed — MDCAT Proffs is PostgreSQL/Supabase-only,
+// and that route's mysql2 dependency was causing the API server to crash on
+// startup (mysql2 was only ever a dependency of the standalone
+// scripts/mysql-restore CLI tool, never of api-server itself). See
+// AdminDatabaseBackup.tsx's top-of-file comment for the full story.
+
+export interface PastPaper { id: number; title: string; examBoard: string; year: string; level: string; active: boolean; archived?: boolean; displayOrder: number; mcqCount: number; programId: number | null; academicYearId: number | null; programTargetKind: string | null; yearTargetNumber: number | null }
+export interface NotebookEntry { id: number; userId: number; mcqId: number | null; title: string; content: string; createdAt: string; updatedAt: string }
+export interface SavedSession { id: number; userId: number; name: string; config: Record<string, unknown>; createdAt: string }
+export interface FlaggedMcq { id: number; userId: number; mcqId: number; reason: string; status: 'open' | 'resolved'; createdAt: string; question: string | null; path: string | null; mcqDeleted: boolean }
+export interface FeedbackEntry { id: number; userId: number | null; category: string; message: string; status: 'open' | 'replied' | 'reviewed'; rating: number | null; featured: boolean; createdAt: string; user: { name: string; email: string } | null }
+export interface FeedbackReply { id: number; feedbackId: number; authorId: number; authorRole: 'admin' | 'student'; message: string; createdAt: string }
+export interface Analytics { range: string; totalSessions: number; averageScore: number; questionsAnswered: number; timeSpentMinutes: number; currentStreak: number; longestStreak: number }
+export interface LeaderboardRow { rank: number; userId: number; name: string; sessions: number; questionsAnswered: number; correct: number; accuracy: number; isYou: boolean }
+export interface PaymentDetails { PAYMENT_INSTRUCTIONS: string; PAYMENT_ACCOUNT_HOLDER: string; PAYMENT_ACCOUNT_NUMBER: string; PAYMENT_BANK_NAME: string; PAYMENT_IFSC_OR_ROUTING: string; PAYMENT_UPI_ID: string; PAYMENT_QR_CODE_PATH: string; PAYMENT_QR_CODE_URL?: string; PAYMENT_RAAST_ID: string; PAYMENT_WALLET_PROVIDER: string; PAYMENT_WALLET_NUMBER: string; PAYMENT_WALLET_ACCOUNT_NAME: string; PAYMENT_BANK_ACCOUNTS: string; PAYMENT_METHODS_CONFIG: string; PAYMENT_LATE_FEE_NOTE: string; PAYMENT_REFUND_POLICY: string; DEFAULT_CURRENCY: string; bankAccounts: BankAccount[]; methods: PaymentMethodConfig[] }
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export const authApi = {
+  register: (body: { name: string; email: string; password: string; phone: string; rollNumber?: string; institutionId: number; programKind: 'MDCAT' | 'BDS'; yearNumber: number; planId: number; method?: string; reference?: string; paymentDate?: string; proofPath?: string }) =>
+    request<{ user: AuthUser; message: string }>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  adminRegister: (body: { name: string; email: string; password: string; inviteCode: string }) =>
+    request<{ token: string; user: AuthUser }>('/auth/admin/register', { method: 'POST', body: JSON.stringify(body) }),
+  login: (body: { email: string; password: string }) =>
+    request<{ token: string; user: AuthUser }>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  me: () => request<AuthUser>('/auth/me'),
+  verifyEmail: (token: string) => request<{ message: string }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
+  resendVerification: (email: string) => request<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
+  forgotPassword: (email: string) => request<{ message: string }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) => request<{ message: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+  updateMe: (body: { name?: string; phone?: string; email?: string; currentPassword?: string }) => request<AuthUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(body) }),
+};
+
+export interface BroadcastNotificationBody {
+  title: string;
+  body: string;
+  type?: 'info' | 'success' | 'warning';
+  programTargetKind?: string | null;
+  yearTargetNumber?: number | null;
+}
+export interface BroadcastNotificationResponse { ok: true; targetedUsers: number | null }
+
+export const notificationsApi = {
+  markRead: (id: number) => request<{ ok: true }>(`/notifications/${id}/read`, { method: 'POST' }),
+  // targetedUsers is null when sent to everyone (no program/year filter),
+  // otherwise the count of students who matched the filter and got a row.
+  broadcast: (body: BroadcastNotificationBody) => request<BroadcastNotificationResponse>('/admin/notifications/broadcast', { method: 'POST', body: JSON.stringify(body) }),
+  // Clears just the signed-in admin's own notification list (their personal
+  // rows deleted, any broadcasts hidden for them only) — same effect as a
+  // student's "Clear all".
+  clearMine: () => request<{ ok: true }>('/notifications/clear', { method: 'POST' }),
+  // Admin-only: wipes every notification for every student and admin. This
+  // is what makes "Clear all" on the admin page remove notifications from
+  // students too, unlike clearMine above.
+  clearAll: () => request<{ ok: true; deleted: number }>('/admin/notifications/clear-all', { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+export const academicApi = {
+  institutions: (active?: boolean, kind?: string) => request<Institution[]>(`/institutions${qs({ active, kind })}`),
+  createInstitution: (body: Partial<Institution>) => request<Institution>('/institutions', { method: 'POST', body: JSON.stringify(body) }),
+  updateInstitution: (id: number, body: Partial<Institution>) => request<Institution>(`/institutions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveInstitution: (id: number) => request<Institution>(`/institutions/${id}`, { method: 'DELETE' }),
+  removeInstitutionPermanent: (id: number) => request<{ ok: true }>(`/institutions/${id}/permanent`, { method: 'DELETE' }),
+
+  programs: (institutionId?: number, active?: boolean) => request<Program[]>(`/programs?${institutionId ? `institutionId=${institutionId}&` : ''}${active === undefined ? '' : `active=${active}`}`),
+  createProgram: (body: Partial<Program>) => request<Program>('/programs', { method: 'POST', body: JSON.stringify(body) }),
+  updateProgram: (id: number, body: Partial<Program>) => request<Program>(`/programs/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveProgram: (id: number) => request<Program>(`/programs/${id}`, { method: 'DELETE' }),
+
+  academicYears: (programId?: number, active?: boolean) => request<AcademicYear[]>(`/academic-years?${programId ? `programId=${programId}&` : ''}${active === undefined ? '' : `active=${active}`}`),
+  createAcademicYear: (body: Partial<AcademicYear>) => request<AcademicYear>('/academic-years', { method: 'POST', body: JSON.stringify(body) }),
+  updateAcademicYear: (id: number, body: Partial<AcademicYear>) => request<AcademicYear>(`/academic-years/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveAcademicYear: (id: number) => request<AcademicYear>(`/academic-years/${id}`, { method: 'DELETE' }),
+
+  batches: (academicYearId?: number, active?: boolean) => request<Batch[]>(`/batches?${academicYearId ? `academicYearId=${academicYearId}&` : ''}${active === undefined ? '' : `active=${active}`}`),
+  createBatch: (body: Partial<Batch>) => request<Batch>('/batches', { method: 'POST', body: JSON.stringify(body) }),
+  updateBatch: (id: number, body: Partial<Batch>) => request<Batch>(`/batches/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveBatch: (id: number) => request<Batch>(`/batches/${id}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Subjects & topics (nested under a module — created inline from the
+// Academic content screen so admins don't need to leave the module list to
+// build out its curriculum)
+// ---------------------------------------------------------------------------
+
+export interface AdminSubject { id: number; moduleId: number; name: string; active?: boolean; topicCount: number; iconUrl?: string | null; displayOrder?: number }
+export interface AdminTopic { id: number; subjectId: number; name: string; active?: boolean; questionCount: number; completed?: boolean; displayOrder?: number }
+
+export const subjectAdminApi = {
+  list: (moduleId?: number) => request<AdminSubject[]>(`/subjects${moduleId ? `?moduleId=${moduleId}` : ''}`),
+  create: (body: { moduleId: number; name: string; active?: boolean; iconPath?: string | null; displayOrder?: number }) => request<AdminSubject>('/subjects', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; active: boolean; iconPath: string | null; displayOrder: number }>) => request<AdminSubject>(`/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/subjects/${id}`, { method: 'DELETE' }),
+};
+
+export const topicAdminApi = {
+  list: (subjectId?: number) => request<AdminTopic[]>(`/topics${subjectId ? `?subjectId=${subjectId}` : ''}`),
+  create: (body: { subjectId: number; name: string; active?: boolean; displayOrder?: number }) => request<AdminTopic>('/topics', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; active: boolean; displayOrder: number }>) => request<AdminTopic>(`/topics/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/topics/${id}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Flashcards (admin CRUD — students get them read-only via the generated
+// useListFlashcards hook)
+// ---------------------------------------------------------------------------
+
+export interface AdminFlashcard { id: number; front: string; back: string; module: string; topic: string; moduleId?: number | null; subjectId?: number | null; topicId?: number | null; active: boolean }
+
+export const flashcardsAdminApi = {
+  create: (body: { front: string; back: string; module: string; topic: string; moduleId?: number; subjectId?: number; topicId?: number }) =>
+    request<AdminFlashcard>('/flashcards', { method: 'POST', body: JSON.stringify(body) }),
+  // Admin-only listing that keeps moduleId/subjectId/topicId on the wire (see
+  // GET /admin/flashcards) — used for the Module > Subject > Topic bank tree,
+  // same pattern as mcqAdminApi.list().
+  list: (filters?: { moduleId?: number; subjectId?: number; topicId?: number; search?: string }) => {
+    const q = new URLSearchParams();
+    if (filters?.moduleId) q.set('moduleId', String(filters.moduleId));
+    if (filters?.subjectId) q.set('subjectId', String(filters.subjectId));
+    if (filters?.topicId) q.set('topicId', String(filters.topicId));
+    if (filters?.search) q.set('search', filters.search);
+    const qs = q.toString();
+    return request<AdminFlashcard[]>(`/admin/flashcards${qs ? `?${qs}` : ''}`);
+  },
+  update: (id: number, body: Partial<{ front: string; back: string; module: string; topic: string; moduleId: number | null; subjectId: number | null; topicId: number | null }>) =>
+    request<AdminFlashcard>(`/flashcards/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/flashcards/${id}`, { method: 'DELETE' }),
+  bulkRemove: (body: { ids: number[] } | { all: true; filters?: { moduleId?: number; subjectId?: number; topicId?: number } }) =>
+    request<{ ok: true; deleted: number }>('/admin/flashcards/bulk', { method: 'DELETE', body: JSON.stringify(body) }),
+};
+
+// ---------------------------------------------------------------------------
+// Admin settings / audit logs / uploads
+// ---------------------------------------------------------------------------
+
+export const settingsApi = {
+  get: () => request<PlatformSettings>('/admin/settings'),
+  update: (body: Partial<PlatformSettings>) => request<PlatformSettings>('/admin/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  rotateAdminCode: () => request<{ ADMIN_SIGNUP_CODE: string }>('/admin/settings/rotate-admin-code', { method: 'POST' }),
+  testStorage: () => request<{ cloudinary: { ok: boolean; error?: string }; cloudinaryBackup: { ok: boolean; error?: string } }>('/admin/settings/test-storage', { method: 'POST' }),
+  // `slot` (Brevo only) tests one account on its own with no failover.
+  testEmail: (to: string, slot?: number) => request<{ ok: boolean; error?: string }>('/admin/settings/test-email', { method: 'POST', body: JSON.stringify(slot ? { to, slot } : { to }) }),
+};
+
+export const auditApi = {
+  list: (limit = 100) => request<AuditLogEntry[]>(`/admin/audit-logs?limit=${limit}`),
+};
+
+export interface AdminBook { id: number; title: string; author: string | null; moduleId: number | null; subjectId: number | null; topicId: number | null; programTargetKind: string | null; yearTargetNumber: number | null; storagePath: string | null; coverImagePath: string | null; active: boolean; isFree: boolean; price: number | null; currency: string | null }
+export interface AdminCoupon { id: number; code: string; discountType: 'percent' | 'fixed'; discountValue: number; active: boolean; maxUses: number | null; usedCount: number; expiresAt: string | null; createdAt: string }
+export const couponsAdminApi = {
+  list: () => request<AdminCoupon[]>('/coupons'),
+  create: (body: { code: string; discountType: 'percent' | 'fixed'; discountValue: number; maxUses?: number | null; expiresAt?: string | null }) => request<AdminCoupon>('/coupons', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: { active?: boolean; discountValue?: number; maxUses?: number | null; expiresAt?: string | null }) => request<AdminCoupon>(`/coupons/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/coupons/${id}`, { method: 'DELETE' }),
+};
+
+export interface AdminBookPurchase { id: number; bookId: number; bookTitle: string; amount: number; currency: string; method: string; reference: string; paymentDate: string; proofPath: string | null; status: 'PAYMENT_PENDING_REVIEW' | 'approved' | 'rejected' | 'suspended'; rejectionReason: string | null; submittedAt: string; reviewedAt: string | null; user?: { name: string; email: string } }
+export const bookPurchasesAdminApi = {
+  list: () => request<AdminBookPurchase[]>('/admin/book-purchases'),
+  approve: (id: number) => request<AdminBookPurchase>(`/admin/book-purchases/${id}/approve`, { method: 'POST' }),
+  reject: (id: number, reason?: string) => request<AdminBookPurchase>(`/admin/book-purchases/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  suspend: (id: number, reason?: string) => request<AdminBookPurchase>(`/admin/book-purchases/${id}/suspend`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  reactivate: (id: number) => request<AdminBookPurchase>(`/admin/book-purchases/${id}/reactivate`, { method: 'POST' }),
+  remove: (id: number) => request<{ ok: true }>(`/admin/book-purchases/${id}`, { method: 'DELETE' }),
+};
+
+export const booksAdminApi = {
+  list: () => request<AdminBook[]>('/admin/books'),
+  create: (body: { title: string; author?: string; programTargetKind?: string | null; yearTargetNumber?: number | null; storagePath: string; coverImagePath?: string; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>('/books', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: { title?: string; author?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/books/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true; warning?: string }>(`/admin/books/${id}/permanent`, { method: 'DELETE' }),
+  backfillLinks: () => request<{ fixed: number; skipped: number; failed: number }>('/admin/books/backfill-links', { method: 'POST' }),
+};
+
+export async function uploadFile(file: File, kind: 'payment-proof' | 'profile-picture' | 'resource' | 'favicon' | 'book'): Promise<{ storagePath: string; url: string | null }> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetchOrThrow(`${API_ORIGIN}/api/uploads/${kind}`, { method: 'POST', credentials: 'include', body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Upload failed', data);
+  return data;
+}
+
+/** PDFs at or above this size are stored on the cPanel disk (sent in pieces) instead of Cloudinary. */
+export const BIG_BOOK_BYTES = 200 * 1024 * 1024;
+const CHUNK_BYTES = 8 * 1024 * 1024;
+
+/** Uploads a big PDF to the cPanel storage in 8 MB pieces (each retried a few times), reporting progress 0..1. */
+export async function uploadBigBook(file: File, onProgress?: (fraction: number) => void): Promise<{ storagePath: string; url: string | null; sizeBytes?: number }> {
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+  let offset = 0;
+  while (offset < file.size) {
+    const end = Math.min(file.size, offset + CHUNK_BYTES), last = end >= file.size;
+    const piece = file.slice(offset, end);
+    let lastErr: unknown = null, data: { storagePath?: string; url?: string | null; sizeBytes?: number } | null = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const res = await fetchOrThrow(`${API_ORIGIN}/api/uploads/book-chunk?id=${id}&offset=${offset}${last ? '&last=1' : ''}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/octet-stream' }, body: piece });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) { const e = new ApiRequestError(res.status, (body && body.error) || 'Upload failed', body); if (res.status >= 400 && res.status < 500) throw Object.assign(e, { fatal: true }); throw e; }
+        data = body; lastErr = null; break;
+      } catch (err) {
+        lastErr = err; if ((err as { fatal?: boolean }).fatal) break;
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
+    if (lastErr) throw lastErr;
+    offset = end; onProgress?.(offset / file.size);
+    if (last) { if (!data?.storagePath) throw new Error('The server did not confirm the upload.'); return { storagePath: data.storagePath, url: data.url ?? null, sizeBytes: data.sizeBytes }; }
+  }
+  throw new Error('That file is empty.');
+}
+
+export const publicApi = {
+  paymentDetails: () => request<PaymentDetails>('/payment-details'),
+};
+
+export const pastPapersApi = {
+  list: (level?: string) => request<PastPaper[]>(`/past-papers${level ? `?level=${encodeURIComponent(level)}` : ''}`),
+  mcqs: (id: number) => request<unknown[]>(`/past-papers/${id}/mcqs`),
+  create: (body: Partial<PastPaper>) => request<PastPaper>('/past-papers', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<PastPaper>) => request<PastPaper>(`/past-papers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archive: (id: number) => request<{ ok: true }>(`/past-papers/${id}`, { method: 'DELETE' }),
+  removePermanent: (id: number) => request<{ ok: true }>(`/past-papers/${id}/permanent`, { method: 'DELETE' }),
+  attachMcqs: (id: number, mcqIds: number[]) => request<{ ok: true }>(`/past-papers/${id}/mcqs`, { method: 'POST', body: JSON.stringify({ mcqIds }) }),
+  backfillYearTargeting: () => request<{ fixed: number; skipped: number }>('/past-papers/backfill-year-targeting', { method: 'POST' }),
+};
+
+export const notebookApi = {
+  list: () => request<NotebookEntry[]>('/notebook'),
+  create: (body: { title?: string; content: string; mcqId?: number }) => request<NotebookEntry>('/notebook', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ title: string; content: string }>) => request<NotebookEntry>(`/notebook/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/notebook/${id}`, { method: 'DELETE' }),
+};
+
+export const savedSessionsApi = {
+  list: () => request<SavedSession[]>('/saved-sessions'),
+  create: (body: { name: string; config: Record<string, unknown> }) => request<SavedSession>('/saved-sessions', { method: 'POST', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/saved-sessions/${id}`, { method: 'DELETE' }),
+};
+
+export const flaggedMcqsApi = {
+  list: () => request<FlaggedMcq[]>('/flagged-mcqs'),
+  create: (body: { mcqId: number; reason?: string }) => request<FlaggedMcq>('/flagged-mcqs', { method: 'POST', body: JSON.stringify(body) }),
+  updateStatus: (id: number, status: 'open' | 'resolved') => request<FlaggedMcq>(`/flagged-mcqs/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  remove: (id: number) => request<{ ok: true }>(`/flagged-mcqs/${id}`, { method: 'DELETE' }),
+  // One-click "resolve everything reported" for the Content Quality
+  // Center's "AI Fix All" action — a single bulk update server-side.
+  resolveAll: () => request<{ ok: true; resolved: number }>('/admin/flagged-mcqs/resolve-all', { method: 'POST' }),
+};
+
+export const feedbackApi = {
+  listAll: () => request<FeedbackEntry[]>('/feedback'),
+  create: (body: { category?: string; message: string }) => request<FeedbackEntry>('/feedback', { method: 'POST', body: JSON.stringify(body) }),
+  updateStatus: (id: number, status: 'open' | 'replied' | 'reviewed') => request<FeedbackEntry>(`/feedback/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  setFeatured: (id: number, featured: boolean) => request<FeedbackEntry>(`/feedback/${id}`, { method: 'PATCH', body: JSON.stringify({ featured }) }),
+  remove: (id: number) => request<{ ok: true }>(`/feedback/${id}`, { method: 'DELETE' }),
+  listReplies: (id: number) => request<FeedbackReply[]>(`/feedback/${id}/replies`),
+  reply: (id: number, message: string) => request<FeedbackReply>(`/feedback/${id}/replies`, { method: 'POST', body: JSON.stringify({ message }) }),
+};
+
+export const analyticsApi = {
+  get: (range: string) => request<Analytics>(`/student/analytics?range=${range}`),
+  leaderboard: (range = '30d') => request<LeaderboardRow[]>(`/leaderboard?range=${range}`),
+  submitSession: (body: { moduleId?: number; subjectId?: number; topicId?: number; mode?: 'timed' | 'untimed'; answers: { mcqId: number; selectedAnswer: string | null }[] }) =>
+    request<{ id: number; scorePercent: number; correctCount: number; totalQuestions: number }>('/practice-sessions', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// ---------------------------------------------------------------------------
+// AI Visualizer activity log (admin, read-only) — students generate
+// visualizations from frontend-student; this app only ever lists what they
+// generated for moderation/visibility purposes.
+// ---------------------------------------------------------------------------
+
+export interface AiVisualizerLogEntry {
+  id: number;
+  prompt: string;
+  status: 'success' | 'error';
+  visualizationType: string | null;
+  errorMessage: string | null;
+  rawResponse: string | null;
+  createdAt: string;
+  student: { name: string; email: string };
+}
+export interface AiVisualizerLibraryEntry { id: number; prompt: string; title: string; hits: number; version: number; lastUsedAt: string | null; createdAt: string; bytes: number; source: 'catalog' | 'custom' }
+export interface AiVisualizerLibraryPage { entries: AiVisualizerLibraryEntry[]; matched: number; offset: number; limit: number; count: number; totalReuses: number; catalogSaved: number; customSaved: number }
+export interface AiVisualizerLibraryParams { q?: string; sort?: 'hits' | 'recent' | 'size' | 'oldest'; source?: 'all' | 'catalog' | 'custom'; limit?: number; offset?: number }
+export interface AiVisualizerCatalogCoverage { total: number; saved: number; disciplines: Array<{ id: string; name: string; program: 'MDCAT' | 'BDS' | 'Both'; total: number; saved: number; reuses: number; groups: Array<{ name: string; total: number; saved: number }> }> }
+export interface AiVisualizerPregenStatus {
+  running: boolean; stopping: boolean; startedAt: number | null; finishedAt: number | null;
+  scope: { discipline: string | null; group: string | null; limit: number | null; concurrency: number };
+  target: number; done: number; failed: number; active: string[]; consecutiveFailures: number;
+  stoppedReason: string | null; recentErrors: Array<{ prompt: string; error: string; at: number }>; etaSeconds: number | null;
+}
+export interface AiVisualizerPregenInfo { status: AiVisualizerPregenStatus; pending: number; total: number }
+export interface AiVisualizerPregenStart { discipline?: string; group?: string; limit?: number; concurrency?: number }
+export const aiVisualizerAdminApi = {
+  pregenStatus: (discipline?: string) => request<AiVisualizerPregenInfo>(`/admin/ai-visualizer-pregen${discipline ? `?discipline=${encodeURIComponent(discipline)}` : ''}`),
+  pregenStart: (body: AiVisualizerPregenStart) => request<{ ok: boolean; target: number }>('/admin/ai-visualizer-pregen/start', { method: 'POST', body: JSON.stringify(body) }),
+  pregenStop: () => request<{ ok: boolean }>('/admin/ai-visualizer-pregen/stop', { method: 'POST' }),
+  list: (limit = 100) => request<AiVisualizerLogEntry[]>(`/admin/ai-visualizer-logs?limit=${limit}`),
+  library: (params: AiVisualizerLibraryParams = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v));
+    return request<AiVisualizerLibraryPage>(`/admin/ai-visualizer-library${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+  catalog: () => request<AiVisualizerCatalogCoverage>('/admin/ai-visualizer-catalog'),
+  deleteLibraryEntry: (id: number) => request<{ ok: boolean }>(`/admin/ai-visualizer-library/${id}`, { method: 'DELETE' }),
+  clearLibrary: () => request<{ ok: boolean }>('/admin/ai-visualizer-library', { method: 'DELETE' }),
+};
+
+export interface MeritWeights { matric: number; fsc: number; mdcat: number }
+export interface MeritRow {
+  id: number; name: string; email: string; phone: string | null; status: string;
+  matricMarks: number | null; matricTotal: number | null;
+  fscMarks: number | null; fscTotal: number | null;
+  mdcatMarks: number | null; mdcatTotal: number | null;
+  mdcatUpdatedAt: string | null; createdAt: string;
+  matricPct: number | null; fscPct: number | null; mdcatPct: number | null;
+  merit: number | null; provisional: number | null;
+}
+export const meritApi = {
+  list: () => request<{ weights: MeritWeights; students: MeritRow[] }>('/admin/merit'),
+  saveWeights: (w: MeritWeights) => request<{ ok: true }>('/admin/merit/weights', { method: 'PUT', body: JSON.stringify(w) }),
+  updateMarks: (id: number, body: Partial<Pick<MeritRow, 'matricMarks' | 'matricTotal' | 'fscMarks' | 'fscTotal' | 'mdcatMarks' | 'mdcatTotal'>>) => request<{ ok: true }>(`/admin/merit/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+};

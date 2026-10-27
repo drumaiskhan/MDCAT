@@ -1,0 +1,63 @@
+{
+  "name": "mdcat-proffs",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "build": "npm run typecheck && npm run build:api && npm run build:student && npm run build:admin",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
+    "dev": "node backend/scripts/local.cjs dev",
+    "dev:api": "npm run dev --workspace=@workspace/api-server",
+    "dev:student": "npm run dev --workspace=@workspace/frontend-student",
+    "dev:admin": "npm run dev --workspace=@workspace/frontend-admin",
+    "build:api": "tsc --build && npm run build --workspace=@workspace/api-server",
+    "build:student": "tsc --build && npm run build --workspace=@workspace/frontend-student",
+    "build:admin": "tsc --build && npm run build --workspace=@workspace/frontend-admin",
+    "start": "npm run start --workspace=@workspace/api-server",
+    "db:push": "npm run push --workspace=@workspace/db",
+    "test:mdcat": "node backend/tests/mdcat/integration.mjs",
+    "db:start": "node backend/scripts/local.cjs db:start",
+    "db:stop": "node backend/scripts/local.cjs db:stop",
+    "dev:all": "concurrently -n api,student,admin -c blue,green,yellow \"npm run dev:api\" \"npm run dev:student\" \"npm run dev:admin\"",
+    "setup": "node backend/scripts/local.cjs setup",
+    "doctor": "node backend/scripts/local.cjs doctor",
+    "package:hosting": "node backend/scripts/package-hosting.mjs",
+    "test:auth": "node backend/tests/mdcat/auth.mjs"
+  },
+  "private": true,
+  "dependencies": {
+    "@replit/connectors-sdk": "0.5.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "concurrently": "10.0.6",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.10",
+    "supertest": "7.3.1",
+    "typescript": "7.0.2"
+  },
+  "workspaces": [
+    "admin",
+    "student",
+    "backend",
+    "backend/lib/*",
+    "backend/scripts"
+  ],
+  "engines": {
+    "node": ">=24.22.1 <25",
+    "npm": ">=12.2.1 <13"
+  },
+  "packageManager": "npm@12.2.1",
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true,
+    "sharp@0.35.5": true
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "tar": "7.5.22",
+    "uuid": "14.0.3",
+    "postcss-selector-parser": "7.1.7",
+    "@esbuild-kit/esm-loader": "npm:tsx@4.23.15"
+  }
+}

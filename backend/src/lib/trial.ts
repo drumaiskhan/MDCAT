@@ -1,0 +1,298 @@
+import { and, desc, eq, gt, gte, ne, sql } from "drizzle-orm";
+import { db, membershipsTable, practiceAttemptsTable, usersTable } from "@workspace/db";
+import { getSetting } from "./settings";
+import { getStudentTargeting } from "./contentVisibility";
+
+/**
+ * General Trial Mode — one place that owns how the platform-wide trial is
+ * configured, so the access gate (middlewares/auth.ts), the books listing,
+ * the public /site-content bundle and the admin settings page can never
+ * drift apart on what "trial mode is on" means.
+ *
+ * Settings keys (all in platform_settings, all plain strings):
+ *   GLOBAL_TRIAL_MODE      "true" turns the trial on — anything else is off.
+ *   GLOBAL_TRIAL_PROGRAM   "" (every program) | "MDCAT" | "BDS".
+ *   GLOBAL_TRIAL_YEARS     Comma-separated academic years, e.g. "1,2,3".
+ *                          Empty = every year. Replaces the old
+ *                          single-year GLOBAL_TRIAL_YEAR, which is still read
+ *                          as a fallback so a site that saved a single year
+ *                          before this existed keeps working unchanged.
+ *   GLOBAL_TRIAL_FEATURES  JSON array of feature keys (see below) the trial
+ *                          unlocks. Not saved yet (blank) = the default set
+ *                          (everything membership-gated, but NOT paid books).
+ *                          "[]" = a trial that unlocks nothing.
+ *   GLOBAL_TRIAL_ENDS_AT   Optional "YYYY-MM-DD". The trial switches itself
+ *                          off after the end of that day (UTC).
+ *
+ * Nothing here ever writes to memberships — turning the trial off (or
+ * letting it expire) instantly restores normal per-student gating.
+ */
+
+export const TRIAL_FEATURE_OPTIONS = [
+  {key:"lectures",label:"Lectures",description:"Recorded lectures and saved playback progress.",defaultOn:true},
+  {key:"live_lectures",label:"Live lectures",description:"Scheduled live classes.",defaultOn:true},
+  { key: "mcqs", label: "MCQ bank & practice", description: "The question bank and practice sessions (Subjects → Topics).", defaultOn: true },
+  { key: "past_papers", label: "Past papers", description: "Opening and practising past papers.", defaultOn: true },
+  { key: "exams", label: "MDCAT mock exams", description: "Listing and sitting MDCAT mock exams.", defaultOn: true },
+  { key: "flashcards", label: "Flashcards", description: "Flashcard decks and review.", defaultOn: true },
+  { key: "resources", label: "Notes", description: "Study notes and reading access.", defaultOn: true },
+  { key: "ai_explain", label: "Ask AI to explain", description: "The on-demand \"Ask AI to explain differently\" button on MCQs and flashcards.", defaultOn: true },
+  { key: "ai_visualizer", label: "AI Visualizer", description: "AI-generated diagrams and step-by-step visual explanations.", defaultOn: true },
+  { key: "ai_mcq_maker", label: "AI MCQ Maker", description: "Students generate their own practice MCQs on any topic with AI.", defaultOn: true },
+  { key: "challenges", label: "Challenge a friend", description: "Head-to-head quiz challenges.", defaultOn: true },
+  // Off by default: books are sold one by one (see routes/books.ts) and were
+  // never part of the old all-or-nothing trial. Turning this on opens EVERY
+  // paid book to trial students, so it has to be a deliberate choice.
+  { key: "books", label: "Paid books", description: "Unlocks every paid book for trial students. Leave off to keep books purchase-only.", defaultOn: false },
+] as const;
+
+export type TrialFeature = (typeof TRIAL_FEATURE_OPTIONS)[number]["key"];
+
+const ALL_FEATURE_KEYS: readonly string[] = TRIAL_FEATURE_OPTIONS.map((o) => o.key);
+const DEFAULT_FEATURES: TrialFeature[] = TRIAL_FEATURE_OPTIONS.filter((o) => o.defaultOn).map((o) => o.key);
+
+export interface TrialConfig {
+  /** Trial switch is on AND the end date (if any) hasn't passed. */
+  active: boolean;
+  /** "" = every program. */
+  program: string;
+  /** [] = every year. */
+  years: number[];
+  features: TrialFeature[];
+  /** ISO timestamp the trial ends at, or null for open-ended. */
+  endsAt: string | null;
+}
+
+const OFF: TrialConfig = { active: false, program: "", years: [], features: DEFAULT_FEATURES, endsAt: null };
+
+export function parseTrialYears(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  const years = raw
+    .split(",")
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6);
+  return Array.from(new Set(years)).sort((a, b) => a - b);
+}
+
+export function parseTrialFeatures(raw: string | null | undefined): TrialFeature[] {
+  if (!raw || !raw.trim()) return DEFAULT_FEATURES;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_FEATURES;
+    return Array.from(new Set(parsed.filter((k): k is TrialFeature => typeof k === "string" && ALL_FEATURE_KEYS.includes(k))));
+  } catch {
+    return DEFAULT_FEATURES;
+  }
+}
+
+function parseEndsAt(raw: string | null | undefined): number | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  // A bare date means "through the end of that day", not "until midnight
+  // at the start of it" — otherwise a trial set to end on the 31st would
+  // stop working on the morning of the 31st.
+  const ms = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T23:59:59.999Z`) : Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** Reads the trial configuration. Fails closed — any settings lookup error
+ * reads as "trial off", never as "trial on". */
+export async function getTrialConfig(): Promise<TrialConfig> {
+  try {
+    if ((await getSetting("GLOBAL_TRIAL_MODE", "false")) !== "true") return OFF;
+    const [program, yearsRaw, legacyYear, featuresRaw, endsAtRaw] = await Promise.all([
+      getSetting("GLOBAL_TRIAL_PROGRAM", ""),
+      getSetting("GLOBAL_TRIAL_YEARS", ""),
+      getSetting("GLOBAL_TRIAL_YEAR", ""),
+      getSetting("GLOBAL_TRIAL_FEATURES", ""),
+      getSetting("GLOBAL_TRIAL_ENDS_AT", ""),
+    ]);
+    const endsAtMs = parseEndsAt(endsAtRaw);
+    if (endsAtMs !== null && Date.now() > endsAtMs) return OFF;
+    const years = parseTrialYears(yearsRaw);
+    return {
+      active: true,
+      program: (program ?? "").trim().toUpperCase(),
+      years: years.length ? years : parseTrialYears(legacyYear),
+      features: parseTrialFeatures(featuresRaw),
+      endsAt: endsAtMs !== null ? new Date(endsAtMs).toISOString() : null,
+    };
+  } catch {
+    return OFF;
+  }
+}
+
+/** Does this trial cover the given feature? Several features means "any of
+ * them" (a route shared by two features, e.g. practice sessions, which both
+ * the MCQ bank and past papers save through). No feature at all means the
+ * route isn't tied to one, so only a trial that covers every default
+ * feature — a full-access trial — opens it. */
+export function trialCoversFeature(config: TrialConfig, feature?: TrialFeature | readonly TrialFeature[]): boolean {
+  if (!config.active) return false;
+  if (feature === undefined) return DEFAULT_FEATURES.every((f) => config.features.includes(f));
+  const wanted = Array.isArray(feature) ? (feature as readonly TrialFeature[]) : [feature as TrialFeature];
+  return wanted.some((f) => config.features.includes(f));
+}
+
+/** True when the trial (if scoped) includes this student. A student with no
+ * program/year on their profile only matches an unrestricted trial. */
+export async function studentInTrialScope(config: TrialConfig, userId: number): Promise<boolean> {
+  if (!config.program && !config.years.length) return true;
+  try {
+    const targeting = await getStudentTargeting(userId);
+    const programOk = !config.program || targeting.programKind === config.program;
+    const yearOk = !config.years.length || (targeting.yearNumber !== null && config.years.includes(targeting.yearNumber));
+    return programOk && yearOk;
+  } catch {
+    return false; // a lookup error must not silently grant access
+  }
+}
+
+/** The one call the access gate and the books listing both make. */
+export async function trialGrantsAccess(userId: number, feature?: TrialFeature | readonly TrialFeature[]): Promise<boolean> {
+  const config = await getTrialConfig();
+  if (!trialCoversFeature(config, feature)) return false;
+  return studentInTrialScope(config, userId);
+}
+
+/** Shape exposed on the public /site-content bundle so the student app can
+ * word its banner and mark locked features without re-deriving defaults. */
+export function publicTrialView(config: TrialConfig) {
+  return { active: config.active, program: config.program, years: config.years, features: config.features, endsAt: config.endsAt };
+}
+
+// ---------------------------------------------------------------------------
+// Daily MCQ cap for trial-only students (TRIAL_DAILY_MCQ_LIMIT)
+// ---------------------------------------------------------------------------
+
+/** True when this student's access to `feature` right now comes ONLY from a
+ * trial — a real paid (non-trial) ACTIVE membership means "no cap" here,
+ * regardless of whether a trial would also cover them. A student with no
+ * membership at all who's covered by General Trial Mode counts as
+ * trial-only too, same as one with an admin-granted per-student trial. */
+export async function studentIsTrialOnly(userId: number, feature: TrialFeature | readonly TrialFeature[]): Promise<boolean> {
+  const [paidActive] = await db
+    .select({ id: membershipsTable.id })
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.userId, userId), eq(membershipsTable.status, "ACTIVE"), eq(membershipsTable.isTrial, false), gt(membershipsTable.expiresAt, new Date())))
+    .limit(1);
+  if (paidActive) return false;
+  // A per-student trial (POST /students/:id/trial) is an ACTIVE membership row
+  // with isTrial = true. It must count as trial-only too — before this, only
+  // General Trial Mode did, so students granted an individual trial were
+  // never capped whenever General Trial Mode was off.
+  const [studentTrial] = await db
+    .select({ id: membershipsTable.id })
+    .from(membershipsTable)
+    .where(and(eq(membershipsTable.userId, userId), eq(membershipsTable.status, "ACTIVE"), eq(membershipsTable.isTrial, true), gt(membershipsTable.expiresAt, new Date())))
+    .limit(1);
+  if (studentTrial) return true;
+  return trialGrantsAccess(userId, feature);
+}
+
+/** How many MCQs (summed across practice sessions, not per-session) a
+ * trial-only student may submit in one UTC calendar day. Setting key
+ * TRIAL_DAILY_MCQ_LIMIT — a whole number, 0 = unlimited; blank/unset
+ * defaults to 50. Applies to BOTH trial paths (an admin's per-student trial
+ * grant — POST /students/:id/trial — and General Trial Mode above) equally;
+ * whichever got the student trial access counts the same toward this cap.
+ * Paying students are never capped — see studentIsTrialOnly. */
+export async function getTrialDailyMcqLimit(): Promise<number> {
+  const raw = await getSetting("TRIAL_DAILY_MCQ_LIMIT", "50");
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : 50;
+}
+
+export interface TrialMcqStatus {
+  /** False for a paying student or an unlimited (0) cap — nothing to show. */
+  limited: boolean;
+  /** The configured cap. 0 means unlimited. */
+  limit: number;
+  /** MCQs already submitted today (UTC), summed across sessions. */
+  used: number;
+  /** limit - used, floored at 0. Infinity when `limited` is false. */
+  remaining: number;
+}
+
+/** One place that answers "how is this student doing against today's trial
+ * MCQ cap" — shared by trialDailyMcqCapError (submit-time enforcement,
+ * below) and GET /student/trial-mcq-usage (the Practice page's "X of Y MCQs
+ * used today" bar), so the two can never disagree on what "used today"
+ * means. */
+export async function getTrialDailyMcqStatus(userId: number): Promise<TrialMcqStatus> {
+  const limit = await getTrialDailyMcqLimit();
+  if (limit === 0 || !(await studentIsTrialOnly(userId, ["mcqs", "past_papers"]))) {
+    return { limited: false, limit, used: 0, remaining: Infinity };
+  }
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const [row] = await db
+    .select({ used: sql<number>`coalesce(sum(${practiceAttemptsTable.totalQuestions}), 0)` })
+    .from(practiceAttemptsTable)
+    // AI MCQ Maker sets (mode "ai") are gated and rate-limited separately and don't use up the question-bank cap.
+    .where(and(eq(practiceAttemptsTable.userId, userId), ne(practiceAttemptsTable.mode, "ai"), gte(practiceAttemptsTable.createdAt, startOfDay)));
+  const used = Number(row?.used ?? 0);
+  return { limited: true, limit, used, remaining: Math.max(0, limit - used) };
+}
+
+/** Returns a user-facing error message if submitting `count` more MCQs
+ * today would put a trial-only student over TRIAL_DAILY_MCQ_LIMIT, or null
+ * if the submission is fine — not a trial-only student, the cap is
+ * unlimited (0), or they still have room today. The one call POST
+ * /practice-sessions makes before recording a session. */
+export async function trialDailyMcqCapError(userId: number, count: number): Promise<string | null> {
+  const status = await getTrialDailyMcqStatus(userId);
+  if (!status.limited) return null;
+  if (count <= status.remaining) return null;
+  return status.remaining <= 0
+    ? `Trial accounts are limited to ${status.limit} MCQs a day. You've used all ${status.limit} for today — come back tomorrow, or ask about upgrading for unlimited access.`
+    : `Trial accounts are limited to ${status.limit} MCQs a day. You have ${status.remaining} left today — try a smaller set, or ask about upgrading for unlimited access.`;
+}
+
+// ---------------------------------------------------------------------------
+// Strict trial-expiry enforcement (per-student trial, POST /students/:id/trial)
+// ---------------------------------------------------------------------------
+
+/** Lapsed-membership check, run on every membership-gated request and at sign-in.
+ *
+ * `users.status` is never flipped by the clock, so an account can still read
+ * "ACTIVE" after its paid plan OR its admin-granted trial has run out. This is
+ * the one place that acts on it: if the student has membership history but no
+ * membership that is both ACTIVE and unexpired, the account is moved to EXPIRED
+ * (lapsed rows are marked EXPIRED for history) — exactly the state of a student
+ * who has no active plan. They can still sign in and see their account, plans and
+ * renewal options, but gated content/data is denied just like for a student who
+ * was never activated. Renewing (payment approval, admin status change, or a new
+ * trial grant) sets them back to ACTIVE.
+ *
+ * Accounts with no membership rows at all (activated by hand) are left alone.
+ * Returns true if this call just expired the account (caller denies the request). */
+export async function expireIfLapsed(userId: number): Promise<boolean> {
+  const rows = await db.select().from(membershipsTable).where(eq(membershipsTable.userId, userId));
+  if (!rows.length) return false;
+  const now = Date.now();
+  if (rows.some((m) => m.status === "ACTIVE" && m.expiresAt.getTime() > now)) return false;
+  const lapsedTrial = rows.some((m) => m.status === "ACTIVE" && m.isTrial && m.expiresAt.getTime() <= now);
+  await db.update(membershipsTable).set({ status: "EXPIRED" }).where(and(eq(membershipsTable.userId, userId), eq(membershipsTable.status, "ACTIVE")));
+  await db.update(usersTable).set({
+    status: "EXPIRED",
+    statusMessage: lapsedTrial ? "Your trial period ended. Choose a membership plan to regain access." : "Your membership has expired. Renew your plan to regain access.",
+  }).where(and(eq(usersTable.id, userId), eq(usersTable.status, "ACTIVE")));
+  return true;
+}
+
+/** @deprecated kept so older imports compile; expired trials are now EXPIRED, not banned. */
+export const banIfTrialExpired = expireIfLapsed;
+
+/** One-off migration-on-touch: accounts the previous rule banned when a trial ended (users.status
+ * SUSPENDED with the trial-ended message, membership suspendedReason "Trial period ended") become
+ * EXPIRED. Admin-made suspensions carry no such message/reason and are never touched. */
+export async function releaseLegacyTrialBan(userId: number): Promise<boolean> {
+  const [u] = await db.select({ status: usersTable.status, statusMessage: usersTable.statusMessage }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!u || u.status !== "SUSPENDED" || !(u.statusMessage ?? "").startsWith("Your trial period ended")) return false;
+  const [m] = await db.select({ id: membershipsTable.id }).from(membershipsTable).where(and(eq(membershipsTable.userId, userId), eq(membershipsTable.suspendedReason, "Trial period ended"))).limit(1);
+  if (!m) return false;
+  await db.update(membershipsTable).set({ status: "EXPIRED" }).where(and(eq(membershipsTable.userId, userId), eq(membershipsTable.suspendedReason, "Trial period ended")));
+  await db.update(usersTable).set({ status: "EXPIRED", statusMessage: "Your trial period ended. Choose a membership plan to regain access." }).where(eq(usersTable.id, userId));
+  return true;
+}

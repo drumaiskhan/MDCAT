@@ -1,0 +1,206 @@
+import { Router, type IRouter } from "express";
+import multer from "multer";
+import { restoreSavedMcqsFromBackup } from "../lib/savedMcqMarks";
+import { z } from "zod";
+import { auditLogsTable, db } from "@workspace/db";
+import { requireAdmin } from "../middlewares/auth";
+import { dbErrorMessage } from "../lib/dbErrors";
+import { logger } from "../lib/logger";
+import {
+  buildFullBackup,
+  validateFullBackup,
+  restoreFullBackup,
+  relinkPastPapersFromBackup,
+  APPLICATION_NAME,
+  type BackupScopeName,
+  type FullBackupFile,
+} from "../lib/fullBackup";
+
+const router: IRouter = Router();
+
+// Whole-database backup files are plain JSON, same reasoning as
+// mcq-backup.ts's own multer instance. A full content-or-user export can
+// run well into the tens of thousands of rows, hence the larger ceiling.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
+  fileFilter: (_req, file, cb) => {
+    const ok = file.originalname.toLowerCase().endsWith(".json") || file.mimetype === "application/json";
+    if (!ok) { cb(new Error("Backup files are .json")); return; }
+    cb(null, true);
+  },
+});
+
+const ScopeQuery = z.object({ scope: z.enum(["content", "users", "full"]) });
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+router.get("/admin/full-backup/export", requireAdmin, async (req, res): Promise<void> => {
+  const parsed = ScopeQuery.safeParse(req.query);
+  if (!parsed.success) { res.status(400).json({ error: 'scope must be "content", "users", or "full"' }); return; }
+  try {
+    const backup = await buildFullBackup(parsed.data.scope);
+    const stamp = backup.exportedAt.replace(/[:.]/g, "-").slice(0, 19);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="mdcatproffs-${parsed.data.scope}-backup-${stamp}.json"`);
+    res.status(200).send(JSON.stringify(backup, null, 2));
+  } catch (err) {
+    logger.error({ err }, "[full-backup] export failed");
+    res.status(500).json({ error: `Could not build the backup: ${dbErrorMessage(err, "unknown error")}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Validate — dry run. Parses and checks a file without writing anything, so
+// the admin UI can show the confirmation screen (counts + validation
+// results) before anyone commits to a restore.
+// ---------------------------------------------------------------------------
+
+router.post("/admin/full-backup/validate", requireAdmin, upload.single("file"), async (req, res): Promise<void> => {
+  if (!req.file) { res.status(400).json({ error: "No backup file uploaded" }); return; }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(req.file.buffer.toString("utf-8"));
+  } catch {
+    res.status(422).json({ error: "That file isn't valid JSON." });
+    return;
+  }
+  try {
+    const result = await validateFullBackup(raw);
+    res.status(200).json(result);
+  } catch (err) {
+    logger.error({ err }, "[full-backup] validate failed");
+    res.status(500).json({ error: `Could not validate this backup: ${dbErrorMessage(err, "unknown error")}` });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Import — actually restores. Always re-validates server-side first (the
+// validate endpoint above is for the confirmation screen; this route never
+// trusts that the client already called it, or that nothing changed since).
+// ---------------------------------------------------------------------------
+
+const ImportQuery = z.object({
+  // "restore-empty" (default) refuses to run if the target tables already
+  // hold data — the primary migration path (empty DB → restore). "wipe-and-
+  // restore" is the explicit override: it deletes existing rows for this
+  // scope's tables (in reverse dependency order) before restoring, inside
+  // the same transaction as the restore itself, so a failure rolls back to
+  // exactly the pre-import state rather than leaving the database wiped
+  // and half-restored.
+  mode: z.enum(["restore-empty", "wipe-and-restore"]).default("restore-empty"),
+});
+
+router.post("/admin/full-backup/import", requireAdmin, upload.single("file"), async (req, res): Promise<void> => {
+  if (!req.file) { res.status(400).json({ error: "No backup file uploaded" }); return; }
+
+  const queryParsed = ImportQuery.safeParse(req.query);
+  if (!queryParsed.success) { res.status(400).json({ error: "Invalid mode" }); return; }
+  const { mode } = queryParsed.data;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(req.file.buffer.toString("utf-8"));
+  } catch {
+    res.status(422).json({ error: "That file isn't valid JSON." });
+    return;
+  }
+
+  const validation = await validateFullBackup(raw);
+  if (!validation.valid || !validation.scope) {
+    res.status(422).json({ error: "This backup failed validation and cannot be restored.", validation });
+    return;
+  }
+  if (validation.targetHasExistingData && mode === "restore-empty") {
+    res.status(409).json({
+      error: `This server already has ${validation.scope} data. Restoring here would create duplicates. Re-run with mode=wipe-and-restore to replace it, or restore into a fresh database instead.`,
+      validation,
+    });
+    return;
+  }
+
+  let result: Awaited<ReturnType<typeof restoreFullBackup>>;
+  try {
+    const file = raw as FullBackupFile;
+    result = await restoreFullBackup(file, mode);
+  } catch (err) {
+    logger.error({ err }, "[full-backup] restore failed");
+    res.status(422).json({ error: `Could not restore this backup: ${dbErrorMessage(err, "unknown database error")}` });
+    return;
+  }
+
+  // The restore above already committed — everything from here on is
+  // best-effort bookkeeping, not part of the restore's correctness. This
+  // used to be inside the same try/catch as restoreFullBackup(), so an
+  // audit-log insert failure (a transient connection blip right after a
+  // multi-minute restore, say) made the route respond 422 "Could not
+  // restore this backup" even though every row had already been committed —
+  // telling the admin the restore failed when it hadn't, and inviting a
+  // needless (and, on wipe-and-restore, destructive) retry. A failed audit
+  // log entry is worth logging loudly, but it must never make a successful
+  // restore look like a failure to the caller.
+  const file = raw as FullBackupFile;
+  try {
+    await db.insert(auditLogsTable).values({
+      actorId: req.user!.id,
+      action: "FULL_DATABASE_RESTORED",
+      entity: file.scope === "content" ? "platform_content" : "student_data",
+      metadata: JSON.stringify({ scope: file.scope, mode, restored: result.restored, wipedFirst: result.wipedFirst, sourceExportedAt: file.exportedAt }),
+    });
+  } catch (err) {
+    logger.error({ err }, "[full-backup] restore succeeded but writing the audit log entry failed — data was restored, only the log entry is missing");
+  }
+
+  res.status(201).json({ ...result, application: APPLICATION_NAME });
+});
+
+// Repair for a restore that left MCQs detached from their past papers: upload
+// the same backup file and the links are filled back in (never overwritten).
+// Repair: students whose Saved MCQs disappeared after a replace/re-import get them back from an older full backup
+// (it has the `savedMcqs` + `mcqs` tables). Questions are found again by their text, so new ids don't matter.
+// ?dryRun=1 only counts. Safe to run twice: a save that already exists is never duplicated.
+router.post("/admin/full-backup/restore-saved-mcqs", requireAdmin, upload.single("file"), async (req, res): Promise<void> => {
+  if (!req.file) { res.status(400).json({ error: "No backup file uploaded" }); return; }
+  let raw: FullBackupFile;
+  try { raw = JSON.parse(req.file.buffer.toString("utf-8")) as FullBackupFile; } catch { res.status(422).json({ error: "That file isn't valid JSON." }); return; }
+  if (!raw || typeof raw !== "object" || !raw.data || !Array.isArray(raw.data.mcqs)) { res.status(422).json({ error: "This doesn't look like a full backup (no MCQs found in it)." }); return; }
+  if (!Array.isArray(raw.data.savedMcqs)) { res.status(422).json({ error: "This backup has no students' saved MCQs in it. Use a \"Full\" or \"Users\" backup made BEFORE they disappeared." }); return; }
+  const dryRun = req.query.dryRun === "1";
+  try {
+    const result = await restoreSavedMcqsFromBackup(raw.data as Record<string, Array<Record<string, unknown>>>, { dryRun });
+    if (!dryRun) await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "SAVED_MCQS_RESTORED", entity: "mcq", metadata: JSON.stringify(result) }).catch((err: unknown) => logger.error({ err }, "[full-backup] saved-mcq audit failed"));
+    res.status(200).json(result);
+  } catch (err) {
+    logger.error({ err }, "[full-backup] restore saved mcqs failed");
+    res.status(500).json({ error: `Could not restore the saved MCQs: ${dbErrorMessage(err, "unknown database error")}` });
+  }
+});
+
+router.post("/admin/full-backup/relink-past-papers", requireAdmin, upload.single("file"), async (req, res): Promise<void> => {
+  if (!req.file) { res.status(400).json({ error: "No backup file uploaded" }); return; }
+  let raw: FullBackupFile;
+  try {
+    raw = JSON.parse(req.file.buffer.toString("utf-8")) as FullBackupFile;
+  } catch {
+    res.status(422).json({ error: "That file isn't valid JSON." });
+    return;
+  }
+  if (!raw || typeof raw !== "object" || !raw.data || !Array.isArray(raw.data.mcqs)) {
+    res.status(422).json({ error: "This doesn't look like a full or content backup (no MCQs found in it)." });
+    return;
+  }
+  try {
+    const result = await relinkPastPapersFromBackup(raw);
+    await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "PAST_PAPER_LINKS_REPAIRED", entity: "mcq", metadata: JSON.stringify(result) }).catch((err: unknown) => logger.error({ err }, "[full-backup] relink audit log failed"));
+    res.status(200).json(result);
+  } catch (err) {
+    logger.error({ err }, "[full-backup] relink failed");
+    res.status(500).json({ error: `Could not repair the links: ${dbErrorMessage(err, "unknown database error")}` });
+  }
+});
+
+export default router;
+
+export type { BackupScopeName };

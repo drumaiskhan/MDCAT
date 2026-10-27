@@ -1,0 +1,434 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background)); --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border)); --color-input: hsl(var(--input)); --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card)); --color-card-foreground: hsl(var(--card-foreground)); --color-card-border: hsl(var(--card-border));
+  --color-popover: hsl(var(--popover)); --color-popover-foreground: hsl(var(--popover-foreground)); --color-popover-border: hsl(var(--popover-border));
+  --color-primary: hsl(var(--primary)); --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary)); --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted)); --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent)); --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-info: hsl(var(--info)); --color-violet: hsl(var(--violet));
+  --color-accent-text: hsl(var(--accent-text));
+  --color-chip-info: hsl(var(--chip-info)); --color-chip-violet: hsl(var(--chip-violet)); --color-chip-success: hsl(var(--chip-success));
+  --color-destructive: hsl(var(--destructive)); --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-sidebar: hsl(var(--sidebar)); --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border)); --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground)); --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground)); --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --font-sans: var(--app-font-sans); --font-serif: var(--app-font-serif); --font-mono: var(--app-font-mono);
+  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: 42 33% 96%; --foreground: 208 35% 19%; --border: 39 22% 87%;
+  --card: 42 40% 99%; --card-foreground: 208 35% 19%; --card-border: 39 22% 87%;
+  --sidebar: 206 41% 16%; --sidebar-foreground: 205 24% 87%; --sidebar-border: 206 34% 25%;
+  --sidebar-primary: 164 42% 56%; --sidebar-primary-foreground: 206 41% 12%; --sidebar-accent: 206 33% 22%; --sidebar-accent-foreground: 205 24% 94%; --sidebar-ring: 164 42% 56%;
+  --popover: 42 40% 99%; --popover-foreground: 208 35% 19%; --popover-border: 39 22% 87%;
+  --primary: 164 42% 39%; --primary-foreground: 42 40% 99%; --secondary: 204 28% 92%; --secondary-foreground: 208 35% 19%;
+  --muted: 41 29% 92%; --muted-foreground: 207 15% 45%; --accent: 34 74% 62%; --accent-foreground: 208 35% 19%;
+  --destructive: 2 62% 52%; --destructive-foreground: 42 40% 99%; --input: 39 22% 82%; --ring: 164 42% 39%;
+  --info: 206 41% 40%; --violet: 271 34% 46%; --accent-text: 34 72% 30%;
+  /* bright tones for chips that sit on the always-dark sidebar (same in both modes) */
+  --chip-info: 206 55% 65%; --chip-violet: 271 45% 68%; --chip-success: 140 60% 70%;
+  --chart-1: 164 42% 39%; --chart-2: 34 74% 62%; --chart-3: 206 41% 40%; --chart-4: 2 62% 52%; --chart-5: 278 24% 55%;
+  --app-font-sans: 'Manrope', sans-serif; --app-font-serif: 'Newsreader', Georgia, serif; --app-font-mono: 'DM Mono', monospace;
+  --radius: .7rem; --elevate-1: rgba(22,43,54,.04); --elevate-2: rgba(22,43,54,.08); --opaque-button-border-intensity: -8;
+  --shadow-2xs: 0 1px 2px hsl(208 35% 19% / .04); --shadow-xs: 0 2px 4px hsl(208 35% 19% / .05);
+  --shadow-sm: 0 4px 10px hsl(208 35% 19% / .06); --shadow: 0 6px 14px hsl(208 35% 19% / .07); --shadow-md: 0 8px 20px hsl(208 35% 19% / .08); --shadow-lg: 0 12px 28px hsl(208 35% 19% / .1); --shadow-xl: 0 18px 40px hsl(208 35% 19% / .12);
+  --button-outline: rgba(22,43,54,.12); --badge-outline: rgba(22,43,54,.06); --tracking-normal: 0em; --spacing: .25rem;
+}
+.dark { --background: 215 32% 8%; --foreground: 210 28% 94%; --border: 215 20% 21%; --card: 215 27% 12%; --card-foreground: 210 28% 94%; --card-border: 215 20% 21%; --sidebar: 216 36% 6%; --sidebar-foreground: 210 22% 86%; --sidebar-border: 215 24% 15%; --sidebar-primary: 166 62% 56%; --sidebar-primary-foreground: 216 36% 8%; --sidebar-accent: 215 26% 15%; --sidebar-accent-foreground: 210 28% 95%; --sidebar-ring: 166 62% 56%; --popover: 215 27% 14%; --popover-foreground: 210 28% 94%; --popover-border: 215 20% 24%; --primary: 166 62% 56%; --primary-foreground: 216 36% 8%; --secondary: 215 22% 18%; --secondary-foreground: 210 28% 94%; --muted: 215 22% 15%; --muted-foreground: 213 16% 72%; --accent: 36 88% 64%; --accent-foreground: 216 36% 8%; --destructive: 2 80% 66%; --destructive-foreground: 216 36% 8%; --input: 215 20% 24%; --ring: 166 62% 56%; --info: 206 60% 68%; --violet: 265 80% 74%; --accent-text: 36 88% 72%; color-scheme: dark; }
+/* Same mobile "white flash on fast scroll" fix as the student app's
+   index.css — see the comment there for the full explanation. */
+@layer base { * { @apply border-border; } html { @apply bg-background; overscroll-behavior-y: none; } body { @apply font-sans antialiased bg-background text-foreground; margin: 0; } }
+
+@layer utilities {
+  .font-display { font-family: var(--app-font-serif); }
+  .font-mono-app { font-family: var(--app-font-mono); }
+  .page-enter { animation: pageIn .45s ease both; }
+  .card-lift { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+  .card-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: hsl(var(--primary) / .35); }
+  .skeleton { background: linear-gradient(100deg, hsl(var(--muted)) 30%, hsl(var(--card)) 50%, hsl(var(--muted)) 70%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+  /* Beautiful, responsive buttons everywhere: a subtle lift + shadow on
+     hover and a gentle press on click, applied via .btn-pop (used across
+     admin actions) as well as every native <button> as a safe fallback so
+     nothing feels flat or unresponsive on any screen size. */
+  .btn-pop { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, background-color .16s ease, opacity .16s ease; }
+  .btn-pop:hover:not(:disabled) { transform: translateY(-1.5px); filter: brightness(1.04); box-shadow: var(--shadow-sm); }
+  .btn-pop:active:not(:disabled) { transform: translateY(0) scale(.97); filter: brightness(.98); }
+  .brand-spinner { color: hsl(var(--primary)); animation: brandSpin 1.7s ease-in-out infinite; stroke-dasharray: 190; stroke-dashoffset: 190; }
+  .brand-spinner path { stroke-dasharray: 190; stroke-dashoffset: 190; animation: brandWaveDraw 1.7s ease-in-out infinite; }
+}
+button { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease; }
+button:hover:not(:disabled) { filter: brightness(1.035); }
+button:active:not(:disabled) { transform: scale(.98); }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid hsl(var(--primary) / .55); outline-offset: 2px; }
+/* Responsive safety net: prevent any flex row (button groups, card headers,
+   form rows) from forcing horizontal scroll on narrow phones — corners of
+   the UI wrap instead of overflowing. */
+@media (max-width: 480px) {
+  .admin-content { padding-left: 14px; padding-right: 14px; }
+}
+@keyframes pageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes brandWaveDraw { 0% { stroke-dashoffset: 190; opacity: .55; } 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: -190; opacity: .55; } }
+@keyframes brandSpin { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+
+/* Admin polish (modernisation pass): every table, scrollbar and focus ring in
+   the admin app picks these up without each page opting in. Scoped to
+   .admin-shell so the sign-in pages are untouched. */
+@layer components {
+  .admin-shell table tbody tr { transition: background-color .15s ease; }
+  .admin-shell table tbody tr:hover { background-color: hsl(var(--muted) / .55); }
+  .admin-shell table thead th { font-weight: 800; letter-spacing: .1em; }
+  .admin-shell :where(button, a, [role="tab"], [role="switch"]):focus-visible { outline: 2px solid hsl(var(--primary) / .55); outline-offset: 2px; border-radius: 10px; }
+  .admin-shell * { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+  .admin-shell ::-webkit-scrollbar { width: 8px; height: 8px; }
+  .admin-shell ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; }
+  .admin-shell ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .5); }
+
+  /* Round of button polish: every filled action button in the admin shell
+     (bg-primary, bg-destructive, and the sidebar's active nav pill) gets a
+     resting shadow — not just on hover — so primary actions read as
+     raised, clickable surfaces at a glance instead of only on interaction.
+     Purely additive; nothing here changes layout, colour, or existing
+     hover/active states, so pages that already set their own shadow keep
+     it untouched (box-shadow doesn't stack, the more specific/last rule
+     applied simply wins). */
+  .admin-shell button.bg-primary:not(:disabled),
+  .admin-shell button.bg-destructive:not(:disabled) { box-shadow: var(--shadow-2xs); }
+  .admin-shell button.bg-primary:not(:disabled):hover,
+  .admin-shell button.bg-destructive:not(:disabled):hover { box-shadow: var(--shadow-sm); }
+
+  /* Icon-only square/round buttons (the ubiquitous `grid size-N
+     place-items-center rounded-* border` pattern used for edit/delete/
+     settings/notification icons throughout the admin) get a visible tinted
+     hover background even where a page forgot to add its own hover: class,
+     so every icon button in the app feels equally responsive. Anything
+     with its own explicit hover:bg-* already wins by specificity/order. */
+  .admin-shell button.grid.place-items-center:not(:disabled):hover { background-color: hsl(var(--muted) / .7); }
+
+  /* Segmented controls / filter-pill rows (payment status filters, MCQ
+     difficulty picker, institution tabs, etc.) — a hairline ring on the
+     active pill so the current selection is unmistakable even on the
+     brand's low-contrast tan/olive palette. */
+  .admin-shell button[aria-pressed="true"],
+  .admin-shell button[aria-current="page"],
+  .admin-shell button[aria-checked="true"] { box-shadow: 0 0 0 1px hsl(var(--primary) / .18); }
+}
+
+/* ---------------------------------------------------------------------------
+   Depth layer — one place that gives every admin page the same soft, layered,
+   slightly-3D feel (raised cards, glossy primary buttons, recessed inputs,
+   ambient background). It targets the shared building blocks by class, so pages
+   inherit it without edits. Lives in @layer components so any page-level
+   utility (shadow-none, etc.) still wins.
+   --------------------------------------------------------------------------- */
+:root {
+  --edge-light: hsl(0 0% 100% / .65);          /* top inner highlight on raised surfaces */
+  --edge-dark: hsl(208 35% 19% / .06);          /* bottom inner shade */
+  --raise-1: 0 1px 1px hsl(208 35% 19% / .05), 0 3px 8px -2px hsl(208 35% 19% / .07), 0 10px 24px -12px hsl(208 35% 19% / .10);
+  --raise-2: 0 2px 2px hsl(208 35% 19% / .06), 0 8px 18px -4px hsl(208 35% 19% / .10), 0 22px 44px -18px hsl(208 35% 19% / .16);
+  --glow-primary: 0 6px 16px -4px hsl(var(--primary) / .45), 0 1px 0 hsl(0 0% 100% / .25) inset;
+  --ambient-a: hsl(var(--primary) / .07); --ambient-b: hsl(var(--info) / .06);
+}
+.dark {
+  --edge-light: hsl(0 0% 100% / .06);
+  --edge-dark: hsl(0 0% 0% / .35);
+  --raise-1: 0 1px 1px hsl(0 0% 0% / .35), 0 4px 10px -2px hsl(0 0% 0% / .40), 0 12px 28px -12px hsl(0 0% 0% / .55);
+  --raise-2: 0 2px 2px hsl(0 0% 0% / .40), 0 10px 22px -4px hsl(0 0% 0% / .50), 0 26px 50px -18px hsl(0 0% 0% / .65);
+  --glow-primary: 0 6px 20px -4px hsl(var(--primary) / .40), 0 1px 0 hsl(0 0% 100% / .18) inset;
+  --ambient-a: hsl(var(--primary) / .10); --ambient-b: hsl(var(--info) / .09);
+}
+
+@layer components {
+  /* ambient light behind the page so surfaces have something to float over */
+  .admin-shell {
+    background-image:
+      radial-gradient(60rem 32rem at 12% -8%, var(--ambient-a), transparent 60%),
+      radial-gradient(48rem 28rem at 100% 0%, var(--ambient-b), transparent 55%);
+    background-attachment: fixed;
+  }
+  .admin-content { perspective: 1400px; }
+
+  /* raised cards / panels / tiles */
+  .admin-shell [class~="bg-card"][class*="rounded-"]:not([class*="fixed"]):not([class*="absolute"]):not(input):not(select):not(button) {
+    background-image: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--card)) 60%, hsl(var(--muted) / .35) 100%);
+    box-shadow: inset 0 1px 0 var(--edge-light), inset 0 -1px 0 var(--edge-dark), var(--raise-1);
+    transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, border-color .28s ease;
+  }
+  /* tilt-and-lift on interactive cards */
+  .admin-shell .card-lift { transform-style: preserve-3d; will-change: transform; }
+  .admin-shell .card-lift:hover {
+    transform: translateY(-3px) rotateX(2deg) scale(1.005);
+    box-shadow: inset 0 1px 0 var(--edge-light), inset 0 -1px 0 var(--edge-dark), var(--raise-2);
+    border-color: hsl(var(--primary) / .4);
+  }
+
+  /* glossy primary buttons */
+  .admin-shell button[class~="bg-primary"]:not(:disabled), .admin-shell a[class~="bg-primary"] {
+    background-image: linear-gradient(180deg, hsl(var(--primary) / 1) 0%, hsl(var(--primary) / .86) 100%);
+    box-shadow: var(--glow-primary);
+  }
+  .admin-shell button[class~="bg-primary"]:hover:not(:disabled) { box-shadow: 0 10px 22px -6px hsl(var(--primary) / .55), 0 1px 0 hsl(0 0% 100% / .3) inset; }
+  .admin-shell button[class~="bg-primary"]:active:not(:disabled) { box-shadow: 0 2px 6px -2px hsl(var(--primary) / .5), 0 2px 4px hsl(0 0% 0% / .18) inset; }
+
+  /* recessed inputs */
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .admin-shell textarea, .admin-shell select {
+    box-shadow: inset 0 1px 2px hsl(208 35% 19% / .07), 0 1px 0 var(--edge-light);
+  }
+  .dark .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .dark .admin-shell textarea, .dark .admin-shell select {
+    box-shadow: inset 0 1px 3px hsl(0 0% 0% / .45), 0 1px 0 var(--edge-light);
+  }
+  .admin-shell input:focus-visible, .admin-shell textarea:focus-visible, .admin-shell select:focus-visible {
+    box-shadow: inset 0 1px 2px hsl(208 35% 19% / .05), 0 0 0 4px hsl(var(--primary) / .14);
+  }
+
+  /* sidebar: soft vertical sheen + hairline edge */
+  .admin-shell aside {
+    background-image: linear-gradient(180deg, hsl(0 0% 100% / .045), transparent 30%, hsl(0 0% 0% / .18));
+    box-shadow: 1px 0 0 hsl(0 0% 100% / .05), 8px 0 32px -12px hsl(0 0% 0% / .45);
+  }
+
+  /* smoother page transitions */
+  .page-enter { animation: pageIn .5s cubic-bezier(.2,.8,.2,1) both; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell .card-lift:hover { transform: none; }
+  .page-enter, .btn-pop, button { animation: none !important; transition: none !important; }
+}
+
+/* ===========================================================================
+   Modern layer (admin redesign) — loaded last so it refines the depth layer
+   above: flatter, calmer surfaces with hairline borders and soft shadows,
+   solid primary buttons, clean inputs, and a phone-first responsive pass.
+   Everything is driven by the theme variables, so Design & Branding colours
+   still apply. Scoped to .admin-shell so the sign-in pages are untouched.
+   =========================================================================== */
+:root {
+  --radius: .85rem;
+  --soft-1: 0 1px 2px hsl(215 30% 15% / .05), 0 1px 1px hsl(215 30% 15% / .03);
+  --soft-2: 0 4px 12px -2px hsl(215 30% 15% / .08), 0 2px 4px hsl(215 30% 15% / .04);
+  --soft-3: 0 12px 28px -8px hsl(215 30% 15% / .14), 0 4px 8px hsl(215 30% 15% / .05);
+}
+.dark {
+  --soft-1: 0 1px 2px hsl(0 0% 0% / .4);
+  --soft-2: 0 4px 12px -2px hsl(0 0% 0% / .45);
+  --soft-3: 0 12px 28px -8px hsl(0 0% 0% / .55);
+}
+
+@layer components {
+  /* calm background instead of the tilted ambient glow */
+  .admin-shell {
+    background-image: radial-gradient(52rem 26rem at 8% -10%, hsl(var(--primary) / .05), transparent 65%);
+    background-attachment: fixed;
+  }
+  .admin-content { perspective: none; }
+
+  /* flat, bordered cards with a soft shadow (no gradient / inner bevel / 3D tilt) */
+  .admin-shell [class~="bg-card"][class*="rounded-"]:not([class*="fixed"]):not([class*="absolute"]):not(input):not(select):not(button) {
+    background-image: none;
+    box-shadow: var(--soft-1);
+    border-color: hsl(var(--border));
+  }
+  .admin-shell .card-lift { transform-style: flat; will-change: auto; }
+  .admin-shell .card-lift:hover { transform: translateY(-2px); box-shadow: var(--soft-3); border-color: hsl(var(--primary) / .35); }
+
+  /* solid, confident primary buttons */
+  .admin-shell button[class~="bg-primary"]:not(:disabled), .admin-shell a[class~="bg-primary"] {
+    background-image: none;
+    box-shadow: 0 1px 2px hsl(var(--primary) / .35), 0 4px 10px -4px hsl(var(--primary) / .45);
+  }
+  .admin-shell button[class~="bg-primary"]:hover:not(:disabled) { box-shadow: 0 2px 4px hsl(var(--primary) / .35), 0 8px 16px -6px hsl(var(--primary) / .5); }
+  .admin-shell button[class~="bg-primary"]:active:not(:disabled) { box-shadow: 0 1px 2px hsl(var(--primary) / .3); }
+
+  /* clean inputs: crisp border, soft focus ring (no inset bevel) */
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .admin-shell textarea, .admin-shell select {
+    box-shadow: none;
+    border-color: hsl(var(--input));
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .admin-shell input:focus-visible, .admin-shell textarea:focus-visible, .admin-shell select:focus-visible {
+    box-shadow: 0 0 0 3px hsl(var(--primary) / .16);
+    border-color: hsl(var(--primary) / .6);
+    outline: none;
+  }
+
+  /* flatter sidebar (no sheen) */
+  .admin-shell aside { background-image: none; box-shadow: none; }
+  @media (max-width: 767px) { .admin-shell aside { box-shadow: var(--soft-3); } }
+
+  /* tables: calmer header, tighter rows */
+  .admin-shell table thead th { font-weight: 700; letter-spacing: .08em; }
+  .admin-shell table tbody tr:hover { background-color: hsl(var(--muted) / .45); }
+
+  /* page-level section headings a touch tighter */
+  .admin-shell h2 { text-wrap: balance; }
+}
+
+/* Phone-first pass ---------------------------------------------------------- */
+@media (max-width: 767px) {
+  /* `clip`, NOT `hidden`: overflow-x:hidden on both html and body turns <body>
+     into its own scroll container, and with `overscroll-behavior-y: none` on
+     it touch drags can no longer chain up to the page — on phones the whole
+     admin panel stopped scrolling / responding. `clip` cuts sideways overflow
+     without creating a scroll container. */
+  html, body { overflow-x: clip; }
+  .admin-shell { background-attachment: scroll; }
+  .admin-main { max-width: 100vw; overflow-x: clip; }
+
+  /* 16px form text stops iOS Safari zooming the page when a field is focused */
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]),
+  .admin-shell textarea, .admin-shell select { font-size: 16px !important; }
+
+  /* comfortable tap targets for text buttons and selects */
+  .admin-shell button:not(.grid):not([class*="size-"]), .admin-shell select { min-height: 40px; }
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]) { min-height: 40px; }
+
+  /* every table scrolls sideways inside its own box instead of stretching the page */
+  .admin-content :where(table) { min-width: 640px; }
+  .admin-content :where(div):has(> table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* side drawers (student profile etc.) go full-width; dialogs get breathing room */
+  .admin-shell .max-w-xl.fixed, .admin-shell [class*="max-w-xl"][class*="h-full"] { max-width: 100vw; }
+  .admin-shell [role="dialog"] { max-width: calc(100vw - 1.5rem); max-height: 90dvh; overflow-y: auto; }
+
+  /* headings and long words never force horizontal scroll */
+  .admin-content h1, .admin-content h2, .admin-content h3, .admin-content p { overflow-wrap: anywhere; }
+
+  /* no hover-lift on touch: it sticks after a tap */
+  .admin-shell .card-lift:hover { transform: none; box-shadow: var(--soft-1); }
+}
+@media (max-width: 380px) {
+  .admin-content { padding-left: 10px; padding-right: 10px; }
+}
+@media (min-width: 768px) { .admin-bottom-nav { display: none; } }
+
+
+/* ===========================================================================
+   VIBRANT 3D LAYER (admin) — matches the student app: soft raised cards with
+   a lit top edge, glossy keycap-style primary buttons, glowing sidebar and
+   brand-tinted ambient colour. Last in the file so it wins over the flat pass
+   above. Driven by theme variables, so Design & Branding colours still apply;
+   motion is transform/opacity only. Scoped to .admin-shell (sign-in untouched).
+   =========================================================================== */
+:root {
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+  --v-lit: inset 0 1px 0 hsl(0 0% 100% / .85);
+  --v-e1: 0 1px 1px hsl(208 35% 19% / .05), 0 6px 14px -6px hsl(208 35% 19% / .12), 0 18px 32px -18px hsl(208 35% 19% / .16);
+  --v-e2: 0 2px 2px hsl(208 35% 19% / .06), 0 14px 26px -10px hsl(var(--primary) / .30), 0 30px 50px -24px hsl(208 35% 19% / .28);
+  --v-key: 0 3px 0 hsl(var(--primary) / .62), 0 10px 18px -8px hsl(var(--primary) / .6);
+}
+.dark {
+  --v-lit: inset 0 1px 0 hsl(0 0% 100% / .09);
+  --v-e1: 0 1px 1px hsl(0 0% 0% / .4), 0 8px 18px -8px hsl(0 0% 0% / .6), 0 22px 36px -22px hsl(0 0% 0% / .7);
+  --v-e2: 0 2px 2px hsl(0 0% 0% / .45), 0 16px 30px -10px hsl(var(--primary) / .28), 0 34px 54px -26px hsl(0 0% 0% / .8);
+  --v-key: 0 3px 0 hsl(var(--primary) / .45), 0 10px 20px -8px hsl(var(--primary) / .5);
+}
+
+@layer components {
+  /* colourful ambient light behind everything */
+  .admin-shell {
+    background-image:
+      radial-gradient(46rem 26rem at 6% -8%, hsl(var(--primary) / .12), transparent 62%),
+      radial-gradient(40rem 24rem at 100% 0%, hsl(var(--violet) / .10), transparent 60%),
+      radial-gradient(36rem 22rem at 70% 108%, hsl(var(--accent) / .09), transparent 60%);
+    background-attachment: fixed;
+  }
+  .admin-content { perspective: 1400px; }
+
+  /* raised cards */
+  .admin-shell [class~="bg-card"][class*="rounded-"]:not([class*="fixed"]):not([class*="absolute"]):not(input):not(select):not(button) {
+    background-image: linear-gradient(180deg, hsl(0 0% 100% / .06), transparent 45%);
+    border-color: hsl(var(--border) / .9);
+    box-shadow: var(--v-lit), var(--v-e1);
+    transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out), border-color .2s ease;
+  }
+  .admin-shell .card-lift { transform-style: preserve-3d; will-change: transform; }
+  .admin-shell .card-lift:hover {
+    transform: translateY(-4px) rotateX(2.5deg) scale(1.006);
+    box-shadow: var(--v-lit), var(--v-e2);
+    border-color: hsl(var(--primary) / .5);
+  }
+
+  /* glossy keycap primary buttons */
+  .admin-shell button[class~="bg-primary"]:not(:disabled), .admin-shell a[class~="bg-primary"] {
+    background-image: linear-gradient(180deg, hsl(0 0% 100% / .22), hsl(0 0% 100% / 0) 58%);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / .35), var(--v-key);
+    transform: translateY(0);
+    transition: transform .16s var(--ease-out), box-shadow .16s var(--ease-out), filter .16s ease;
+  }
+  .admin-shell button[class~="bg-primary"]:hover:not(:disabled), .admin-shell a[class~="bg-primary"]:hover { transform: translateY(-1px); filter: brightness(1.06); }
+  .admin-shell button[class~="bg-primary"]:active:not(:disabled), .admin-shell a[class~="bg-primary"]:active { transform: translateY(3px); box-shadow: inset 0 1px 2px hsl(0 0% 0% / .2), 0 0 0 hsl(0 0% 0% / 0); }
+  .admin-shell button[class~="bg-destructive"]:not(:disabled) {
+    background-image: linear-gradient(180deg, hsl(0 0% 100% / .2), hsl(0 0% 100% / 0) 58%);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / .3), 0 3px 0 hsl(var(--destructive) / .6), 0 10px 18px -8px hsl(var(--destructive) / .55);
+  }
+
+  /* header: frosted glass with a soft brand glow underline */
+  .admin-shell .admin-header { box-shadow: 0 1px 0 hsl(var(--primary) / .12), 0 10px 24px -18px hsl(var(--primary) / .5); background-image: linear-gradient(90deg, hsl(var(--primary) / .05), transparent 40%, hsl(var(--violet) / .05)); }
+  .admin-shell .admin-header :is(a, button).border.bg-card { box-shadow: var(--v-lit), var(--v-e1); }
+
+  /* sidebar: rich navy depth, glowing active pill */
+  .admin-shell aside {
+    background-image:
+      radial-gradient(120% 40% at 0% 0%, hsl(var(--sidebar-primary) / .16), transparent 60%),
+      radial-gradient(100% 40% at 100% 100%, hsl(var(--violet) / .16), transparent 60%),
+      linear-gradient(180deg, hsl(0 0% 100% / .04), transparent 30%, hsl(0 0% 0% / .2));
+    box-shadow: 1px 0 0 hsl(0 0% 100% / .06), 12px 0 36px -14px hsl(0 0% 0% / .55);
+  }
+  .admin-shell aside :is(a, button)[class*="bg-sidebar-accent"], .admin-shell aside :is(a, button)[aria-current="page"] {
+    background-image: linear-gradient(180deg, hsl(var(--sidebar-primary) / .22), hsl(var(--sidebar-primary) / .08));
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / .12), inset 0 0 0 1px hsl(var(--sidebar-primary) / .3), 0 8px 18px -10px hsl(var(--sidebar-primary) / .6);
+  }
+  .admin-shell aside :is(a, button) { transition: transform .18s var(--ease-out), background-color .18s ease; }
+  .admin-shell aside :is(a, button):hover { transform: translateX(2px); }
+
+  /* recessed inputs with a vibrant focus ring */
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .admin-shell textarea, .admin-shell select {
+    box-shadow: inset 0 1px 3px hsl(208 35% 19% / .08), 0 1px 0 hsl(0 0% 100% / .5);
+  }
+  .dark .admin-shell input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .dark .admin-shell textarea, .dark .admin-shell select {
+    box-shadow: inset 0 1px 3px hsl(0 0% 0% / .5), 0 1px 0 hsl(0 0% 100% / .05);
+  }
+  .admin-shell input:focus-visible, .admin-shell textarea:focus-visible, .admin-shell select:focus-visible {
+    box-shadow: inset 0 1px 2px hsl(208 35% 19% / .05), 0 0 0 4px hsl(var(--primary) / .2), 0 8px 18px -8px hsl(var(--primary) / .5);
+  }
+
+  /* tables: tinted header, springy row hover */
+  .admin-shell table thead th { background: hsl(var(--primary) / .07); }
+  .admin-shell table tbody tr:hover { background-color: hsl(var(--primary) / .07); }
+
+  /* vibrant badges / pills */
+  .admin-shell :is(.rounded-full)[class*="bg-primary/1"] { box-shadow: inset 0 0 0 1px hsl(var(--primary) / .22); }
+
+  /* bottom tab bar on phones: floating glass dock */
+  .admin-shell .admin-bottom-nav { box-shadow: 0 -10px 28px -14px hsl(0 0% 0% / .35), inset 0 1px 0 hsl(0 0% 100% / .1); background-image: linear-gradient(180deg, hsl(0 0% 100% / .05), transparent); }
+  .admin-shell .admin-bottom-nav [aria-current="page"] > span { background-image: linear-gradient(180deg, hsl(var(--primary) / .28), hsl(var(--primary) / .12)); box-shadow: inset 0 1px 0 hsl(0 0% 100% / .2), 0 6px 14px -6px hsl(var(--primary) / .6); }
+}
+
+/* Dark mode: the overview hero-style page titles pick up a deep gradient */
+.dark .admin-shell .font-display { text-shadow: 0 2px 14px hsl(var(--primary) / .18); }
+
+@media (max-width: 767px) {
+  .admin-shell .card-lift:hover { transform: none; box-shadow: var(--v-lit), var(--v-e1); }
+  /* status bar / notch safe area for the native app */
+  .admin-shell .admin-header { padding-top: env(safe-area-inset-top, 0px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell .card-lift:hover, .admin-shell aside :is(a, button):hover { transform: none; }
+}
+
+/* MDCAT Proffs: Indigo light and dark defaults. Admin branding remains editable. */
+:root { --primary: 245 58% 51%; --primary-foreground: 0 0% 100%; --ring: 245 58% 51%; --background: 240 100% 98%; --card: 0 0% 100%; --sidebar: 244 47% 20%; --sidebar-primary: 234 89% 74%; --sidebar-primary-foreground: 244 47% 14%; --sidebar-accent: 244 40% 28%; --sidebar-ring: 234 89% 74%; --accent: 234 89% 90%; --accent-foreground: 244 47% 20%; }
+.dark { --primary: 234 89% 74%; --primary-foreground: 244 47% 14%; --ring: 234 89% 74%; --background: 244 35% 9%; --card: 244 30% 13%; --sidebar: 244 40% 7%; --sidebar-primary: 234 89% 74%; --sidebar-accent: 244 30% 18%; }

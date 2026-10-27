@@ -1,0 +1,85 @@
+import { eq } from "drizzle-orm";
+import { db, platformSettingsTable } from "@workspace/db";
+import { REDACTED_SECRET_PLACEHOLDER } from "./fullBackup";
+
+// Design & Branding — stored as plain hex strings (admin UI uses native
+// <input type="color">), applied client-side as CSS vars (see each
+// frontend's src/lib/theme.ts). These are the shipped defaults so a fresh
+// install already matches the reference design before an admin touches
+// anything; getThemeSettings() below fills in any key that isn't yet saved.
+export const THEME_KEYS = ["THEME_PRIMARY", "THEME_SECONDARY", "THEME_ACCENT", "THEME_BACKGROUND", "THEME_CARD", "THEME_TEXT", "THEME_MODE"] as const;
+export const DEFAULT_THEME: Record<(typeof THEME_KEYS)[number], string> = {
+  THEME_PRIMARY: "#087F78",
+  THEME_SECONDARY: "#DCEEE5",
+  THEME_ACCENT: "#F2A084",
+  THEME_BACKGROUND: "#F8F7F2",
+  THEME_CARD: "#FFFFFF",
+  THEME_TEXT: "#203D38",
+  THEME_MODE: "light",
+};
+
+const cache = new Map<string, { value: string; expiresAt: number }>();
+const CACHE_TTL_MS = 30_000;
+
+export async function getSetting(key: string, fallback: string | null = null): Promise<string | null> {
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, key));
+  // A restored backup writes "__REDACTED__" in place of any secret-shaped
+  // value (see lib/fullBackup.ts) so the export file never contains real
+  // secrets. Treat that placeholder as if the setting were never saved, so
+  // callers fall through to `fallback` instead of trying to use the literal
+  // string "__REDACTED__" as a real invite code / SMTP password / API key.
+  const raw = row?.value;
+  const value = raw !== undefined && raw !== REDACTED_SECRET_PLACEHOLDER ? raw : fallback;
+  if (value !== null) cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  return value;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  await db
+    .insert(platformSettingsTable)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value, updatedAt: new Date() } });
+  cache.delete(key);
+  allSettingsCache = null;
+}
+
+// getAllSettings() backs /api/site-content, which every page (logged-in or
+// not — footer, about page, login/register branding) fetches on load. Left
+// uncached, that's a full table scan on the busiest public endpoint in the
+// app, once per page view, per user. Cached the same way getSetting() above
+// caches individual keys, and invalidated on setSetting() so an admin
+// changing a setting is reflected within one TTL window (or immediately,
+// since setSetting also clears the single-key cache admins actually read
+// from right after saving).
+let allSettingsCache: { value: Record<string, string>; expiresAt: number } | null = null;
+
+export async function getAllSettings(): Promise<Record<string, string>> {
+  if (allSettingsCache && allSettingsCache.expiresAt > Date.now()) return allSettingsCache.value;
+  const rows = await db.select().from(platformSettingsTable);
+  // Same redaction guard as getSetting() above: a restored row whose value
+  // is still "__REDACTED__" is dropped rather than surfaced to
+  // /api/site-content or the settings admin page as if it were real.
+  const value = Object.fromEntries(
+    rows.filter((row) => row.value !== REDACTED_SECRET_PLACEHOLDER).map((row) => [row.key, row.value]),
+  );
+  const oldPreset: Record<string, string> = { THEME_PRIMARY: '#4338CA', THEME_SECONDARY: '#6366F1', THEME_ACCENT: '#818CF8' };
+  if (value.THEME_STUDIO_VERSION !== '1') {
+    if (Object.entries(oldPreset).every(([key, hex]) => value[key]?.toUpperCase() === hex)) {
+      for (const key of THEME_KEYS) {
+        if (key === 'THEME_MODE') continue;
+        const legacySurfaces: Record<string, string> = { THEME_BACKGROUND: '#F5F5FF', THEME_CARD: '#FFFFFF', THEME_TEXT: '#1E1B4B' };
+        if (key in oldPreset || !value[key] || value[key].toUpperCase() === legacySurfaces[key]) {
+          await setSetting(key, DEFAULT_THEME[key]);
+          value[key] = DEFAULT_THEME[key];
+        }
+      }
+    }
+    await setSetting('THEME_STUDIO_VERSION', '1');
+    value.THEME_STUDIO_VERSION = '1';
+  }
+  allSettingsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
+  return value;
+}

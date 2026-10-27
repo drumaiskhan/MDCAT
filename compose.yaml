@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mdcatproffs
+      POSTGRES_USER: mdcat
+      POSTGRES_PASSWORD: mdcat_local_only
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - mdcat_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mdcat -d mdcatproffs']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  mdcat_postgres:

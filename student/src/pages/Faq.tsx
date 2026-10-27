@@ -1,0 +1,86 @@
+// Standalone marketing page at "/faq" (see App.tsx) — didn't exist before
+// this SEO pass. Also emits FAQPage JSON-LD (same structured-data approach
+// as the site-wide Organization/WebSite/SiteNavigationElement blocks in
+// index.html) since it's a natural fit here and can earn FAQ rich results
+// in search, not just the sitelink itself.
+import { Link } from 'wouter';
+import { ArrowRight } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { siteContentApi } from '@/lib/api';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Footer, AnimatedBrandMark, useDocumentHead } from '@/lib/shared';
+
+const FAQS = [
+  { q: 'Is practice mode timed?', a: "No — practice mode is untimed and explanation-first by default. Timed MDCAT mock exams are there separately, for when you actually want the exam-day pressure." },
+  { q: 'Which programs and years are covered?', a: 'MDCAT, across every college, program, and academic year — organised by subject and topic so you only see what\'s relevant to you.' },
+  { q: 'Do questions come with explanations?', a: 'Yes — every MCQ includes a worked explanation, not just the correct answer, so you understand the "why" as you go.' },
+  { q: 'Can I track my weak areas?', a: 'Yes — progress tracking automatically flags weak topics from your practice history, so revision time goes where it actually helps. Your stats are visible only to you.' },
+  { q: 'What is the AI Visualizer?', a: 'Describe a concept — for example cardiac output, body fluid compartments or the oxygen–haemoglobin curve — and it builds an interactive 2D diagram with sliders and live values. Generating one can take up to a minute, and more specific prompts usually give better results.' },
+  { q: 'What is the AI MCQ Maker?', a: 'Type any topic, or a fuller instruction like "management of DKA, clinical vignettes", and it writes a practice set for you. It is handy for extra practice on a topic you want to drill.' },
+  { q: 'Are past papers, flashcards and books included?', a: 'Yes — past papers are organised block by block, flashcards give quick spaced review, and the Books section lets you read free books or unlock paid ones in a protected in-app reader.' },
+  { q: 'Can I challenge a friend?', a: 'Yes — in Challenge you set a quiz, send the code to a classmate, and see who scores higher. You can also keep a daily streak and climb the leaderboard.' },
+  { q: 'Can I take notes and save my place?', a: 'Yes — flag or bookmark tricky MCQs, keep private notes in your Notebook, and save a practice session to resume it later from Saved Sessions.' },
+  { q: 'Does it work on my phone?', a: 'Yes — the site is built to work well on phones, so you can practise in your mobile browser as comfortably as on a laptop.' },
+  { q: 'What do the paid plans include?', a: 'Paid plans unlock deeper access to the MCQ bank, timed MDCAT mock exams, past papers, flashcards and more. Exactly what is included depends on the plan — see the Pricing page for current plans and rates.' },
+  { q: 'How do I cancel or change my plan?', a: 'Manage your membership any time from Profile → Membership once you\'re signed in. Plans can be changed or cancelled there, no hidden fees. Your payment history is under Payments.' },
+  { q: 'I found a wrong answer or a bug — how do I report it?', a: "Flag the MCQ directly from the question screen, or use Send Feedback from your account menu once you're signed in. You can also reach us on the Contact page." },
+];
+
+export default function Faq() {
+  const siteQ = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
+  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCAT';
+
+  useDocumentHead({
+    title: `FAQs — ${platformName}`,
+    description: `Frequently asked questions about ${platformName}'s MCQ bank, MDCAT mock exams, pricing, and progress tracking for MDCAT students.`,
+    path: '/faq',
+  });
+
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQS.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+  };
+
+  return <div className="min-h-[100dvh] bg-background">
+    <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 md:px-8">
+        <Link href="/" className="flex items-center gap-2" data-testid="link-faq-logo">
+          <AnimatedBrandMark size={22} className="text-primary" />
+          <span className="text-[15px] font-extrabold tracking-[-.03em] text-primary">{platformName}</span>
+        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/login" className="rounded-xl px-4 py-2.5 text-xs font-extrabold text-foreground hover:bg-muted" data-testid="link-faq-login">Log in</Link>
+          <Link href="/register" className="btn-pop rounded-xl bg-primary px-5 py-2.5 text-xs font-extrabold text-primary-foreground shadow-sm" data-testid="link-faq-signup">Sign up</Link>
+        </div>
+      </div>
+    </header>
+
+    <section className="mx-auto max-w-3xl px-5 py-16 text-center md:px-8 md:py-20">
+      <div className="font-mono-app text-[10px] uppercase tracking-[.16em] text-primary">FAQs</div>
+      <h1 className="mt-3 font-display text-4xl tracking-[-.03em] md:text-5xl">Frequently asked questions</h1>
+    </section>
+
+    <section className="mx-auto max-w-2xl px-5 pb-16 md:px-8">
+      <Accordion type="single" collapsible className="rounded-2xl border border-border bg-card px-2">
+        {FAQS.map((f, i) => <AccordionItem key={f.q} value={`faq-${i}`} className="border-border last:border-b-0">
+          <AccordionTrigger className="px-4 text-left text-sm font-extrabold hover:no-underline" data-testid={`trigger-faq-${i}`}>{f.q}</AccordionTrigger>
+          <AccordionContent className="px-4 text-sm leading-6 text-muted-foreground">{f.a}</AccordionContent>
+        </AccordionItem>)}
+      </Accordion>
+      <div className="mt-10 text-center">
+        <p className="text-sm text-muted-foreground">Didn't find what you needed?</p>
+        <Link href="/contact" className="btn-pop mt-4 inline-flex items-center gap-2 rounded-xl border border-border px-6 py-3 text-xs font-extrabold text-foreground hover:bg-muted" data-testid="link-faq-contact">
+          Contact us <ArrowRight size={14} />
+        </Link>
+      </div>
+    </section>
+
+    <div className="mx-auto max-w-6xl px-5 pb-16 md:px-8"><Footer variant="full" /></div>
+  </div>;
+}

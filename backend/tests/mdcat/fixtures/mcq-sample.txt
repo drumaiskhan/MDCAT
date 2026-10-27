@@ -1,0 +1,14 @@
+1. What is 2 + 2?
+A. 1
+Explanation: One is too small.
+B. 2
+Explanation: Two is too small.
+C. 3
+Explanation: Three is too small.
+D. 4
+Explanation: Two plus two equals four.
+E. 5
+Explanation: Five is too large.
+Answer: D
+Hint: Add two pairs.
+Reference: Arithmetic test fixture.

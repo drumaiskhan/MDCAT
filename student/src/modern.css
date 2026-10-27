@@ -1,0 +1,188 @@
+/* ===========================================================================
+   MODERN LAYER — one place that restyles every signed-in section.
+   Imported after index.css / profile3d.css and BEFORE perf.css (main.tsx).
+
+   How it reaches "every section" without editing 60 pages: the older depth
+   system builds cards, keycaps, wells and tiles from a handful of CSS
+   variables (--raise-1, --raise-2, --well, --sheen, --edge-color) and shared
+   classes (.d3-*, .dash-*, .student-shell …). Re-defining those tokens with
+   lighter, crisper values restyles all of them at once.
+
+   Design goals
+   • Calm, crisp surfaces: hairline borders + one soft, tight shadow (the old
+     4-layer, 30–50px-blur shadows were the costliest paint on long lists).
+   • Colour-tinted depth: shadows/glows derive from --primary, so an admin
+     re-brand (Design & Branding) still re-colours everything.
+   • Motion only via transform/opacity, short and springy; nothing loops.
+   • Dark mode gets its own tuned tokens, not inverted light ones.
+   Unlayered on purpose (beats the @layer rules in index.css without !important).
+   =========================================================================== */
+
+/* ---- 1. Tokens ----------------------------------------------------------- */
+:root:root {
+  --radius: .9rem;
+  --sheen: hsl(0 0% 100% / .35);
+  --edge-color: hsl(var(--primary) / .55);
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+
+  /* elevation scale: e1 resting, e2 hover/raised, e3 overlays */
+  --e1: 0 0 0 1px hsl(208 35% 19% / .045), 0 1px 2px hsl(208 35% 19% / .05), 0 4px 10px -4px hsl(208 35% 19% / .08);
+  --e2: 0 0 0 1px hsl(var(--primary) / .16), 0 2px 4px hsl(208 35% 19% / .06), 0 10px 20px -8px hsl(208 35% 19% / .16);
+  --e3: 0 0 0 1px hsl(208 35% 19% / .06), 0 8px 16px -4px hsl(208 35% 19% / .12), 0 24px 40px -16px hsl(208 35% 19% / .22);
+  --raise-1: var(--e1);
+  --raise-2: var(--e2);
+  --well: inset 0 1px 3px hsl(208 35% 19% / .10), inset 0 0 0 1px hsl(208 35% 19% / .03);
+  --glow: 0 6px 18px -6px hsl(var(--primary) / .5);
+}
+:root.dark {
+  --sheen: hsl(0 0% 100% / .03);
+  --e1: 0 0 0 1px hsl(0 0% 100% / .06), 0 1px 2px hsl(0 0% 0% / .4), 0 4px 10px -4px hsl(0 0% 0% / .5);
+  --e2: 0 0 0 1px hsl(var(--primary) / .28), 0 2px 4px hsl(0 0% 0% / .4), 0 10px 20px -8px hsl(0 0% 0% / .6);
+  --e3: 0 0 0 1px hsl(0 0% 100% / .08), 0 8px 16px -4px hsl(0 0% 0% / .5), 0 24px 40px -16px hsl(0 0% 0% / .7);
+  --raise-1: var(--e1);
+  --raise-2: var(--e2);
+  --well: inset 0 1px 3px hsl(0 0% 0% / .5), inset 0 0 0 1px hsl(0 0% 100% / .04);
+  --glow: 0 6px 18px -6px hsl(var(--primary) / .45);
+}
+
+/* ---- 2. Type & rendering --------------------------------------------------- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; }
+body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
+::selection { background: hsl(var(--primary) / .22); }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+/* `text-wrap` is a shorthand that also sets text-wrap-mode: wrap. This file is
+   unlayered, so it beats Tailwind's layered `truncate` / `whitespace-nowrap`
+   (white-space: nowrap) and made single-line headings wrap and overlap their
+   neighbours. Re-assert nowrap for those utilities. */
+:is(h1, h2, h3, h4, p, span):is(.truncate, .whitespace-nowrap, .text-nowrap) { white-space: nowrap; text-wrap-mode: nowrap; }
+.student-shell h1, .student-shell h2 { letter-spacing: -.02em; }
+.student-shell :is(table, .tabular, [class*="font-mono-app"], time) { font-variant-numeric: tabular-nums; }
+
+/* ---- 3. Shell: calm ambient backdrop, crisp header, floating tab bar ------- */
+.student-shell {
+  background-image:
+    radial-gradient(640px 360px at 92% -6%, hsl(var(--primary) / .07), transparent 65%),
+    radial-gradient(520px 320px at -4% 2%, hsl(var(--accent) / .07), transparent 62%);
+  background-repeat: no-repeat;
+}
+.student-header { border-bottom-color: hsl(var(--border) / .6); box-shadow: 0 1px 0 hsl(var(--background)), 0 6px 14px -12px hsl(208 35% 19% / .25); }
+.tabbar-dock { border-radius: 1.4rem; box-shadow: var(--e3); }
+.dark .tabbar-dock { box-shadow: var(--e3); }
+.tab-key { background: hsl(var(--primary) / .14); box-shadow: inset 0 0 0 1px hsl(var(--primary) / .22); }
+
+/* ---- 4. Surfaces ------------------------------------------------------------ */
+.student-shell :is(.rounded-2xl, .rounded-3xl, .rounded-xl).border.bg-card:not(.border-dashed):not(.no-3d),
+.d3-card, .dash-card {
+  background-image: none;
+  border-color: hsl(var(--border) / .8);
+  box-shadow: var(--e1);
+}
+.student-shell :is(a, button).rounded-2xl.border.bg-card:not(.no-3d),
+.card-lift { transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out), border-color .2s ease; }
+.student-shell :is(a, button).rounded-2xl.border.bg-card:not(.no-3d):hover { box-shadow: var(--e2); }
+.card-lift:hover { transform: translateY(-3px); box-shadow: var(--e2); border-color: hsl(var(--primary) / .35); }
+.card-lift:active { transform: translateY(-1px) scale(.995); }
+
+/* ---- 5. Buttons: solid, confident, tactile (no fat 3px edge) --------------- */
+.student-shell :is(button, a).bg-primary:not(:disabled):not([aria-disabled="true"]):not(.no-3d),
+.dash-key, .d3-key {
+  background-image: linear-gradient(180deg, hsl(0 0% 100% / .16), hsl(0 0% 100% / 0) 60%);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / .28), var(--glow);
+  transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), filter .18s ease;
+}
+.student-shell :is(button, a).bg-primary:not(:disabled):not([aria-disabled="true"]):not(.no-3d):hover,
+.dash-key:hover, .d3-key:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 hsl(0 0% 100% / .34), 0 10px 22px -8px hsl(var(--primary) / .6); }
+.student-shell :is(button, a).bg-primary:not(:disabled):not([aria-disabled="true"]):not(.no-3d):active,
+.dash-key:active, .d3-key:active { transform: translateY(0) scale(.97); box-shadow: inset 0 1px 2px hsl(0 0% 0% / .18); }
+.student-shell button:not(:disabled):active { transition-duration: .08s; }
+
+/* ---- 6. Fields: clean border, soft focus halo ------------------------------- */
+.student-shell :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
+  box-shadow: none;
+  border-color: hsl(var(--input));
+  border-radius: .8rem;
+  background-color: hsl(var(--card));
+}
+.dark .student-shell :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) { box-shadow: none; }
+.student-shell :where(input, select, textarea):hover:not(:focus-visible):not(:disabled) { border-color: hsl(var(--primary) / .35); }
+.student-shell :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus-visible {
+  border-color: hsl(var(--primary) / .7);
+  box-shadow: 0 0 0 4px hsl(var(--primary) / .14);
+}
+
+/* ---- 7. Wells, chips, progress, tables --------------------------------------- */
+.d3-well { background: hsl(var(--muted)); box-shadow: var(--well); }
+.bar-fill, .dash-meter__fill { background-image: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / .72)); box-shadow: none; }
+.dash-chip, .dash-eyebrow { letter-spacing: .08em; }
+.student-shell table { border-collapse: separate; border-spacing: 0; }
+.student-shell table thead th { font-weight: 700; letter-spacing: .08em; background: hsl(var(--muted) / .5); }
+.student-shell table tbody tr:hover { background-color: hsl(var(--primary) / .05); }
+
+/* ---- 8. Dialogs / popovers / toasts ------------------------------------------ */
+.student-shell [role="dialog"], [data-radix-popper-content-wrapper] > * { box-shadow: var(--e3); border-radius: 1.1rem; }
+@keyframes mdlPop { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
+.student-shell [role="dialog"] { animation: mdlPop .22s var(--ease-out) backwards; }
+
+/* ---- 9. Motion: short, springy, transform/opacity only ----------------------- */
+@keyframes mdlRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.page-enter { animation: mdlRise .38s var(--ease-out) backwards; }
+.student-shell a, .student-shell button { -webkit-tap-highlight-color: transparent; }
+
+/* Skeletons: soft sweep that only repaints the highlight, respects reduced motion. */
+.skeleton { background: linear-gradient(100deg, hsl(var(--muted)) 30%, hsl(var(--muted) / .55) 50%, hsl(var(--muted)) 70%); background-size: 200% 100%; border-radius: .9rem; }
+
+/* ---- 10. Scrollbars ------------------------------------------------------------ */
+.student-shell * { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / .3) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter, .student-shell [role="dialog"] { animation: none !important; }
+  html { scroll-behavior: auto; }
+}
+
+/* Fix: the sheen rule above replaces `background-image`, which wiped the
+   gradient that gave .dash-key its fill — leaving white text on nothing
+   (invisible "Resume" button). Give these buttons a real solid fill. */
+.dash-key:not(.dash-key--light), .d3-key { background-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.dash-key--light { background-color: hsl(var(--primary-foreground)); color: hsl(var(--primary)); }
+
+/* ---- Dark mode: dashboard hero (navy > indigo, teal + violet glows) ------
+   Tokens are re-scoped inside the hero so every rule that reads --primary /
+   --primary-foreground follows: deep surface, light text, light Resume pill. */
+.dark .dash-hero {
+  --primary: 210 62% 22%;
+  --primary-foreground: 210 30% 97%;
+  --edge-color: hsl(222 55% 10%);
+  --hero-deep: hsl(232 44% 22%);
+  background: linear-gradient(155deg, #0E2A38 0%, #12294A 55%, #1C2456 100%);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / .1), 0 24px 40px -24px hsl(0 0% 0% / .8);
+  border: 1px solid hsl(0 0% 100% / .1);
+}
+.dark .dash-hero__orb--a { background: radial-gradient(closest-side, rgba(45,217,196,.32), transparent); filter: none; }
+.dark .dash-hero__orb--b { background: radial-gradient(closest-side, rgba(167,139,250,.22), transparent); }
+.dark .dash-hero__ring { border-color: hsl(0 0% 100% / .05); }
+.dark .dash-hero .dash-key--light { background-color: #E8FBF7; background-image: none; color: #12294A; box-shadow: 0 3px 0 hsl(0 0% 0% / .35), 0 12px 20px -10px hsl(0 0% 0% / .7); }
+.dark .dash-hero .dash-streak { background: hsl(0 0% 100% / .07); border-color: hsl(0 0% 100% / .14); }
+
+/* Resume pill on the hero: guaranteed solid fill in BOTH modes (stronger
+   selector so nothing else can turn it see-through). */
+.dash-hero .dash-key.dash-key--light { background: linear-gradient(180deg, #ffffff, #E8FBF7); color: #12294A; box-shadow: 0 3px 0 hsl(0 0% 0% / .3), 0 12px 20px -10px hsl(0 0% 0% / .6), inset 0 1px 0 #fff; }
+
+/* ---- Dark mode: Practice setup page ---------------------------------------
+   The header panel used light Tailwind gradient stops (indigo-50 / blue-50)
+   that dark-compat.css didn't cover, leaving a pale slab with faint text. */
+.dark .from-indigo-50 { --tw-gradient-from: hsl(230 42% 19%); }
+.dark .via-indigo-50 { --tw-gradient-via: hsl(226 40% 16%); }
+.dark .to-blue-50 { --tw-gradient-to: hsl(214 46% 15%); }
+.dark .text-blue-600 { color: hsl(213 92% 72%); }
+.dark .text-blue-500 { color: hsl(213 92% 70%); }
+.dark .text-green-600 { color: hsl(145 65% 60%); }
+.dark .text-amber-500 { color: hsl(38 95% 64%); }
+.dark .text-red-500 { color: hsl(2 90% 70%); }
+.dark .text-indigo-400 { color: hsl(232 90% 78%); }
+.dark .hover\:border-blue-300:hover { border-color: hsl(213 70% 55%); }
+/* Option tiles (difficulty / question count / timer): visible resting state */
+.dark .student-shell button.card-lift.border.bg-card:not(:disabled):not(.border-2) { background: hsl(var(--secondary) / .55); border-color: hsl(var(--border) / 1); }
+.dark .student-shell button.card-lift.border-2.border-blue-500 { border-color: hsl(213 92% 62%); box-shadow: 0 0 0 3px hsl(213 92% 62% / .18), 0 10px 22px -12px hsl(213 92% 62% / .6); }
+.dark .student-shell button.card-lift.border.bg-card:disabled { opacity: .4; }

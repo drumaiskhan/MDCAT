@@ -1,0 +1,59 @@
+/* Sidebar remake — shared by the student and admin panels.
+   Structure (collapsible groups, tinted tiles, find box, profile) lives in
+   components/nav/SidebarNav.tsx; this file only styles it. Loaded after
+   studio.css so it wins over the older .studio-nav rules. */
+
+.student-sidebar, .admin-sidebar { scrollbar-width: thin; scrollbar-color: hsl(var(--sidebar-border)) transparent; }
+
+.sb-nav { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 6px; }
+
+/* find a page */
+.sb-find { display: flex; align-items: center; gap: 8px; height: 36px; margin: 0 2px 10px; padding: 0 10px; border-radius: 12px; border: 1px solid hsl(var(--sidebar-foreground) / .1); background: hsl(var(--sidebar-foreground) / .05); color: hsl(var(--sidebar-foreground) / .55); transition: border-color .15s, background .15s, box-shadow .15s; }
+.sb-find:focus-within { border-color: hsl(var(--sidebar-primary) / .6); background: hsl(var(--sidebar-foreground) / .08); box-shadow: 0 0 0 3px hsl(var(--sidebar-primary) / .15); }
+.sb-find input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-size: 12px; font-weight: 500; color: hsl(var(--sidebar-foreground)); }
+.sb-find input::placeholder { color: hsl(var(--sidebar-foreground) / .45); }
+.sb-find button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: inherit; }
+.sb-find button:hover { background: hsl(var(--sidebar-foreground) / .12); }
+
+/* groups */
+.sb-group__head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px 6px; border-radius: 8px; text-align: left; color: hsl(var(--sidebar-foreground) / .5); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; transition: color .15s; }
+.sb-group__head > span { flex: 1; }
+.sb-group__head:hover:not(:disabled) { color: hsl(var(--sidebar-foreground) / .85); }
+.sb-group__head:disabled { cursor: default; }
+.sb-group__chev { transition: transform .25s cubic-bezier(.22, 1, .36, 1); }
+.sb-group[data-open="false"] .sb-group__chev { transform: rotate(-90deg); }
+.sb-group__pending { font-style: normal; min-width: 18px; padding: 1px 6px; border-radius: 999px; background: hsl(var(--sidebar-primary)); color: hsl(var(--sidebar-primary-foreground)); font-size: 10px; font-weight: 800; text-align: center; letter-spacing: 0; }
+.sb-group__body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .28s cubic-bezier(.22, 1, .36, 1); }
+.sb-group[data-open="false"] .sb-group__body { grid-template-rows: 0fr; }
+.sb-group__inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+
+/* items */
+.sb-item { position: relative; display: flex; align-items: center; gap: 11px; padding: 7px 10px 7px 8px; border-radius: 12px; color: hsl(var(--sidebar-foreground) / .78); font-size: 12.5px; font-weight: 600; line-height: 1.2; transition: background .15s, color .15s, transform .15s; }
+.sb-item:hover { background: hsl(var(--sidebar-foreground) / .07); color: hsl(var(--sidebar-foreground)); }
+.sb-item:hover .sb-item__tile { transform: scale(1.06); }
+.sb-item:focus-visible { outline: 2px solid hsl(var(--sidebar-ring)); outline-offset: 1px; }
+.sb-item__tile { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 9px; background: hsl(var(--h) 70% 60% / .14); color: hsl(var(--h) 78% 70%); transition: transform .2s cubic-bezier(.22, 1, .36, 1), background .15s, color .15s, box-shadow .15s; }
+.sb-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-item__lock { flex: none; opacity: .55; }
+.sb-item__badge { flex: none; min-width: 20px; padding: 2px 6px; border-radius: 999px; background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); font-size: 10px; font-weight: 800; text-align: center; }
+
+.sb-item[aria-current="page"] { background: linear-gradient(90deg, hsl(var(--h) 70% 60% / .2), hsl(var(--h) 70% 60% / .06)); color: hsl(var(--sidebar-foreground)); font-weight: 700; }
+.sb-item[aria-current="page"]::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 4px 4px 0; background: hsl(var(--h) 78% 66%); box-shadow: 0 0 12px hsl(var(--h) 78% 66% / .7); }
+.sb-item[aria-current="page"] .sb-item__tile { background: hsl(var(--h) 72% 58%); color: #fff; box-shadow: 0 4px 12px hsl(var(--h) 72% 50% / .45); }
+
+.sb-empty { padding: 18px 10px; text-align: center; font-size: 12px; color: hsl(var(--sidebar-foreground) / .55); }
+
+/* profile card */
+.sb-profile { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 16px; border: 1px solid hsl(var(--sidebar-foreground) / .1); background: linear-gradient(135deg, hsl(var(--sidebar-foreground) / .08), hsl(var(--sidebar-foreground) / .03)); }
+.sb-profile__avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(135deg, hsl(var(--sidebar-primary)), hsl(var(--sidebar-primary) / .55)); color: hsl(var(--sidebar-primary-foreground)); font-size: 12px; font-weight: 800; }
+.sb-profile__text { flex: 1; min-width: 0; }
+.sb-profile__text strong, .sb-profile__text small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-profile__text strong { font-size: 12.5px; font-weight: 700; color: hsl(var(--sidebar-foreground)); }
+.sb-profile__text small { margin-top: 2px; font-size: 10.5px; color: hsl(var(--sidebar-foreground) / .55); }
+.sb-profile button { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; color: hsl(var(--sidebar-foreground) / .7); transition: background .15s, color .15s; }
+.sb-profile button:hover:not(:disabled) { background: hsl(var(--destructive) / .18); color: hsl(var(--destructive)); }
+.sb-profile button:disabled { opacity: .5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-group__body, .sb-group__chev, .sb-item, .sb-item__tile { transition: none; }
+}

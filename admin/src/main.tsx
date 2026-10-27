@@ -1,0 +1,41 @@
+import {apiOrigin} from '@/lib/api-origin';
+import { createRoot } from 'react-dom/client';
+import { setBaseUrl } from '@workspace/api-client-react';
+
+import App from './App';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { enableGlobalScreenshotGuard } from '@/lib/nativeScreenshotGuard';
+
+import './index.css';
+import './fx.css'; // sidebar puck / keycaps / tilt (same as the student panel)
+import './modern.css'; // shared surfaces, buttons, fields, tables
+import './dark-modern.css'; // modern dark theme (same as the student panel)
+import './studio.css';
+import './sidebar.css'; // sidebar remake (collapsible groups, tinted tiles, find box)
+import './perf.css'; // must stay last: lite mode on phones
+import { initFx } from '@/lib/fx';
+
+// Stamps <html data-fx="full|lite"> before first paint (see lib/fx.ts).
+initFx();
+
+// Split deployments (frontend on Vercel/Netlify, backend on Railway/Render)
+// set VITE_API_BASE_URL to the backend's origin at build time. Same-origin
+// deployments leave it unset and requests stay relative ("/api/...").
+if (apiOrigin) {
+  setBaseUrl(apiOrigin);
+}
+
+// No-op on web; blocks screenshots/recording on Android and hides the
+// app-switcher preview on iOS when running as a native app.
+void enableGlobalScreenshotGuard();
+
+createRoot(document.getElementById('root')!, {
+  // Keeps caught errors off reportError(), which would raise the dev overlay.
+  onCaughtError: (error, errorInfo) => {
+    console.error(error, errorInfo.componentStack);
+  },
+}).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

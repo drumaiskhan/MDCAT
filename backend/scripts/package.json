@@ -1,0 +1,28 @@
+{
+  "name": "@workspace/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./mysql-restore/restore": "./src/mysql-restore/restore.ts"
+  },
+  "scripts": {
+    "hello": "tsx ./src/hello.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate:mysql-schema": "tsx ./src/mysql-restore/generateSchema.ts",
+    "restore:mysql": "tsx ./src/mysql-restore/restore.ts"
+  },
+  "dependencies": {
+    "@workspace/db": "*",
+    "drizzle-orm": "0.45.4",
+    "mysql2": "3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15"
+  },
+  "engines": {
+    "node": ">=24.22.1 <25",
+    "npm": ">=12.2.1 <13"
+  }
+}

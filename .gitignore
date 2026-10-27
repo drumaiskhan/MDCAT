@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+
+# Build output
+dist/
+**/dist/
+build/
+**/build/
+# TypeScript incremental/project-reference state. For composite libs this file
+# lives NEXT TO tsconfig.json (e.g. lib/db/tsconfig.tsbuildinfo), not inside dist/,
+# so deleting dist/ alone leaves it behind and `tsc --build` then skips the
+# rebuild (TS6305). Treat it as build output, same as dist/.
+*.tsbuildinfo
+.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Capacitor native projects (student, frontend-admin):
+# the ios/ and android/ folders themselves ARE committed (standard Capacitor
+# practice — they contain hand-edited native config), only their generated
+# build output/caches are ignored here.
+**/ios/App/build/
+**/ios/App/Pods/
+**/ios/App/output/
+**/ios/DerivedData/
+**/android/app/build/
+**/android/build/
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/*.xcuserstate
+**/xcuserdata/
+
+# Hostinger web-hosting packages
+hostinger-out/
+
+# Generated hosting artifacts and temporary integration databases
+**/hosting/
+.mdcat-test-*/
+*-upload.zip
+
+.mdcat-auth-*/

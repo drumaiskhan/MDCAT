@@ -1,0 +1,1 @@
+Read HOSTING-AND-LOCAL.md in the source root. Upload student/admin CONTENTS to separate domains; edit config.js on each. Upload api CONTENTS to a separate Node app, install with npm install --omit=dev, set environment variables, startup app.js. No production secrets are included.
