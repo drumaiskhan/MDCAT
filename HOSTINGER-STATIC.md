@@ -9,17 +9,17 @@ Create one Hostinger website per frontend and connect the GitHub repo.
 
 Student site (e.g. example.com):
 - Project root: `student`        (this ignores the root app.js / server.cjs)
-- Build command: `npm install && npm run build`
+- Build command: `npm install --include=dev && npm run build`
 - Publish / output directory: `dist`
-- Node version: 24
+- Node version: 22 or 24
 
 Admin site (e.g. admin.example.com): same, with Project root `admin`.
 
 If Hostinger only offers repository root instead:
-- Student build: `npm install --prefix student && npm run build --prefix student`, output `student/dist`
-- Admin build:   `npm install --prefix admin && npm run build --prefix admin`, output `admin/dist`
+- Student build: `npm install --include=dev --prefix student && npm run build --prefix student`, output `student/dist`
+- Admin build:   `npm install --include=dev --prefix admin && npm run build --prefix admin`, output `admin/dist`
 
-(Use `npm install`, not `npm ci`: student/ and admin/ have no package-lock.json.)
+(student/ and admin/ now have package-lock.json, so `npm ci` also works.)
 
 ## Option B - Upload built files (no build on Hostinger)
 ```
@@ -35,3 +35,20 @@ Upload the CONTENTS of `deploy/student-hostinger` and `deploy/admin-hostinger` (
 1. Edit `config.js` on each site: set `API_ORIGIN` to `https://api.example.com`.
 2. On the API set APP_URL to both frontend origins (CORS), see DEPLOYMENT.md.
 3. Check: refresh a nested page (no 404), open /config.js, and /api/healthz on the API domain.
+
+## Important: never commit student/hosting or admin/hosting
+Those folders are prebuilt copies. If they are in the repo, an old build can be served and
+changes to src/ never show up. They are now deleted and git-ignored; Hostinger must build
+from `student/src` and `admin/src` and publish `dist`.
+
+## If your Hostinger plan uses "Node.js Web App" (asks for a startup file)
+`student/server.cjs` and `admin/server.cjs` serve the built `dist/` folder (no dependencies).
+- Project root: `student` (or `admin`)
+- Build command: `npm install --include=dev && npm run build`
+- Start command: `npm start`
+- Startup / entry file: `server.cjs`   (NOT hosting/server.cjs - that folder is deleted)
+- Node version: 22 or 24
+
+## Why `--include=dev`
+Vite, Tailwind and the React plugin are devDependencies. Hostinger often sets NODE_ENV=production,
+and then a plain `npm install` skips them and the build fails with "vite: not found" or a missing plugin.

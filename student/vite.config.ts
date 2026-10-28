@@ -1,13 +1,13 @@
 import path from 'path';
 import { cpSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-const pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
+let pdfRoot = path.resolve(import.meta.dirname, 'node_modules/pdfjs-dist');
+try { pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')); } catch { /* package.json not exported: fall back to the local node_modules path */ }
 const pdfAssets = () => ({name:'pdf-assets', closeBundle(){for(const dir of ['cmaps','standard_fonts','wasm','iccs']){const source=path.join(pdfRoot,dir);if(existsSync(source))cpSync(source,path.resolve(import.meta.dirname,'dist/pdf-assets',dir),{recursive:true});}}});
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
-import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
 // PORT/BASE_PATH are provided automatically on Replit. Outside Replit (local
 // dev on any machine, or a platform like Vercel/Netlify/Railway/Render)
@@ -27,10 +27,10 @@ export default defineConfig({
     react(),
     pdfAssets(),
     tailwindcss(),
-    runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== 'production' &&
     process.env.REPL_ID !== undefined
       ? [
+          await import('@replit/vite-plugin-runtime-error-modal').then((m) => m.default()),
           await import('@replit/vite-plugin-cartographer').then((m) =>
             m.cartographer({
               root: path.resolve(import.meta.dirname, '..'),

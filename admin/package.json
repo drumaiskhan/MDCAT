@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
+    "start": "node server.cjs",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -93,7 +94,6 @@
     "mammoth": "1.13.0"
   },
   "engines": {
-    "node": ">=24.22.1 <25",
-    "npm": ">=12.2.1 <13"
+    "node": ">=22.12.0"
   }
 }

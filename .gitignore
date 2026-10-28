@@ -54,3 +54,7 @@ deploy/
 *-upload.zip
 
 .mdcat-auth-*/
+
+# Prebuilt upload folders (stale copies get deployed instead of fresh builds)
+student/hosting/
+admin/hosting/
