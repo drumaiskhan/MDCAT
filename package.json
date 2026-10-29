@@ -4,13 +4,13 @@
   "license": "MIT",
   "scripts": {
     "build": "npm run typecheck && npm run build:api && npm run build:student && npm run build:admin",
-    "typecheck:libs": "tsc --build",
+    "typecheck:libs": "tsc --build --force",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present && npm run typecheck --prefix student && npm run typecheck --prefix admin",
     "dev": "node backend/scripts/local.cjs dev",
     "dev:api": "npm run dev --workspace=@workspace/api-server",
     "dev:student": "npm run dev --prefix student",
     "dev:admin": "npm run dev --prefix admin",
-    "build:api": "tsc --build && npm run build --workspace=@workspace/api-server",
+    "build:api": "tsc --build --force && npm run build --workspace=@workspace/api-server",
     "build:student": "npm run build --prefix student",
     "build:admin": "npm run build --prefix admin",
     "start": "npm run start --workspace=@workspace/api-server",
@@ -43,10 +43,10 @@
     "backend/scripts"
   ],
   "engines": {
-    "node": ">=24.22.1 <25",
-    "npm": ">=12.2.1 <13"
+    "node": ">=22.12.0 <23",
+    "npm": ">=10.9.0 <11"
   },
-  "packageManager": "npm@12.2.1",
+  "packageManager": "npm@10.9.7",
   "allowScripts": {
     "esbuild@0.28.2": true,
     "esbuild@0.25.12": true,
@@ -57,6 +57,7 @@
     "tar": "7.5.22",
     "uuid": "14.0.3",
     "postcss-selector-parser": "7.1.7",
-    "@esbuild-kit/esm-loader": "npm:tsx@4.23.15"
+    "@esbuild-kit/esm-loader": "npm:tsx@4.23.15",
+    "@types/node": "22.20.5"
   }
 }

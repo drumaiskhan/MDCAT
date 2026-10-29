@@ -27,7 +27,7 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: npm
-      - run: npm install --global npm@12.2.1
+      - run: npm install --global npm@10.9.7
       - run: npm ci
       - run: npm run test:mdcat && npm run test:auth
       - run: npm run build

@@ -4,10 +4,10 @@ Three source folders: **admin**, **student**, **backend**. Shared database/clien
 
 ## Start locally
 
-Install Node.js 24.22.1 and Docker Desktop, then run:
+Install Node.js 22.22.2 and Docker Desktop, then run:
 
 ```sh
-npm install --global npm@12.2.1
+npm install --global npm@10.9.7
 npm run setup
 npm run db:start
 npm run dev
@@ -32,4 +32,4 @@ Checks: `npm run typecheck`, `npm run test:mdcat`, `npm run test:auth`. No pnpm 
 
 GitHub Actions deployment (API to cPanel; frontends via Hostinger Git branches) is described in [DEPLOYMENT.md](DEPLOYMENT.md). Keep `.github/workflows/deploy.yml` at your GitHub repository root.
 
-Latest update: Node.js 24.22.1 / npm 12.2.1; OSPE/OSCE and Resources panels removed. See [DEPENDENCY-UPDATE.md](DEPENDENCY-UPDATE.md) for dependency versions and checks.
+Latest update: Node.js 22.22.2 / npm 10.9.7; OSPE/OSCE and Resources panels removed. See [DEPENDENCY-UPDATE.md](DEPENDENCY-UPDATE.md) for dependency versions and checks.

@@ -4,10 +4,10 @@ This is a separate application. Keep its database, domains, JWT secret and app d
 
 ## Windows / VS Code
 
-Install Node.js 24.22.1 and Docker Desktop. Extract the ZIP, open the MDCAT-Three-Folders folder in VS Code, and open its terminal. Run commands from the folder containing package.json, not C:\Windows\System32.
+Install Node.js 22.22.2 and Docker Desktop. Extract the ZIP, open the MDCAT-Three-Folders folder in VS Code, and open its terminal. Run commands from the folder containing package.json, not C:\Windows\System32.
 
 ```powershell
-npm install --global npm@12.2.1
+npm install --global npm@10.9.7
 npm run setup
 npm run db:start
 npm run dev

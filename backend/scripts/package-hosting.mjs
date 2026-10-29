@@ -71,7 +71,7 @@ for (const name of ['@napi-rs/canvas', 'pdfjs-dist', 'nodemailer', 'pino', 'pino
 fs.writeFileSync(path.join(api, 'package.json'), JSON.stringify({
   name: 'mdcat-api-runtime', private: true, main: 'app.js',
   scripts: { start: 'node app.js', build: 'node -e "console.log(\'API already built\')"' },
-  engines: { node: '>=24.22.1 <25' }, packageManager: 'npm@12.2.1', dependencies,
+  engines: { node: '>=22.12.0 <23' }, packageManager: 'npm@10.9.7', dependencies,
 }, null, 2) + '\n');
 // cPanel/Passenger startup file.
 fs.writeFileSync(path.join(api, 'app.js'),

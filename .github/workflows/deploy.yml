@@ -27,7 +27,7 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: npm
-      - run: npm install --global npm@12.2.1
+      - run: npm install --global npm@10.9.7
       - run: npm install --no-audit --no-fund
       - run: npm install --prefix student --no-audit --no-fund
       - run: npm install --prefix admin --no-audit --no-fund

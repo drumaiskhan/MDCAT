@@ -7,7 +7,15 @@
 - GitHub workflow `deploy.yml`: build/test, deploy API to cPanel over SSH (health-checked, `deploy-cpanel.sh`), then publish the built sites to branches `hostinger-student` and `hostinger-admin` (`publish-frontend-branch.sh`) for Hostinger's Git auto-deploy.
 - File bridge instructions updated: API and bridge are both on cPanel now.
 
-# Node 24 and dependency update
+# Typecheck: always rebuild project-reference declarations
+
+- `typecheck:libs`, `build:api` and the api-server `typecheck` script now use `tsc --build --force` for `lib/db` / `lib/api-zod`. `tsc --build` skips a rebuild when source mtimes are older than the old `dist/*.d.ts`/`.tsbuildinfo` (e.g. after extracting a zip), leaving stale declarations that made `usersTable` look like it lacked the merit-list columns (37 false errors in `routes/auth.ts` / `routes/merit.ts`). No source or schema changes.
+
+# Node 22 target (downgraded from Node 24)
+
+- Node.js 22.22.2 (>=22.12.0 <23) and npm 10.9.7 across package engines, local setup, hosting packages, deploy script and GitHub Actions; @types/node pinned to 22.20.5.
+
+# Earlier: Node 24 and dependency update
 
 - Node.js 24.22.1 and npm 12.2.1 targets across local setup, hosting packages and GitHub Actions.
 - Updated dependencies and lockfile; compatibility fixes for PDF.js, charts, calendar and resizable panels. See DEPENDENCY-UPDATE.md for versions and validation.

@@ -6,7 +6,7 @@ Every push to `main` installs npm dependencies, runs upload/authentication tests
 
 ## One-time cPanel setup
 
-Create a separate Node 24.22.1 application for this website, startup file `app.js`, and a new reachable PostgreSQL database. Set production environment variables using hosting.env.example in the panel or an API `.env`. Create separate student/admin document roots and map their domains. Do not reuse MedSchoolProffs or Medify application folders/databases.
+Create a separate Node 22.22.2 application for this website, startup file `app.js`, and a new reachable PostgreSQL database. Set production environment variables using hosting.env.example in the panel or an API `.env`. Create separate student/admin document roots and map their domains. Do not reuse MedSchoolProffs or Medify application folders/databases.
 
 SSH and rsync must be enabled by your provider. Add the deployment public key in cPanel SSH Access and authorize it. The private key must be usable non-interactively. Ask the provider for the SSH port and verified host-key fingerprint; obtain the known_hosts entry and compare its fingerprint before storing it. Do not disable host-key verification.
 
@@ -36,11 +36,11 @@ Under **Settings → Secrets and variables → Actions**, add:
 | Variable | CPANEL_STUDENT_DIR | Student domain document root |
 | Variable | CPANEL_ADMIN_DIR | Admin domain document root |
 | Variable | CPANEL_API_ORIGIN | https://api.your-domain.com — no /api or trailing slash |
-| Variable | CPANEL_NODE_ENV | Optional absolute activation file, e.g. /home2/ACCOUNT/nodevenv/mdcat-api/24/bin/activate |
+| Variable | CPANEL_NODE_ENV | Optional absolute activation file, e.g. /home2/ACCOUNT/nodevenv/mdcat-api/22/bin/activate |
 
 Use repository-level variables so the build job can read CPANEL_API_ORIGIN. Create the **cpanel-production** environment under Settings → Environments; you may add required reviewers if you want an approval gate. Do not put database passwords or JWT_SECRET in the frontend build or repository. They remain on cPanel.
 
-CPANEL_NODE_ENV is the file after `source` in the activation command shown by cPanel. If omitted, Node 24.22.1 and npm must already be on the SSH login PATH. The script activates the environment, runs npm 12.2.1 through npx to install production runtime dependencies, and touches `tmp/restart.txt` to request a Passenger restart. It then checks `/api/healthz` AND `/api/site-content` before uploading the frontends. Config.js is populated automatically with CPANEL_API_ORIGIN.
+CPANEL_NODE_ENV is the file after `source` in the activation command shown by cPanel. If omitted, Node 22.22.2 and npm must already be on the SSH login PATH. The script activates the environment, runs npm 10.9.7 through npx to install production runtime dependencies, and touches `tmp/restart.txt` to request a Passenger restart. It then checks `/api/healthz` AND `/api/site-content` before uploading the frontends. Config.js is populated automatically with CPANEL_API_ORIGIN.
 
 ## Deployment behavior and recovery
 

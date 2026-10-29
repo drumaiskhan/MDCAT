@@ -11,7 +11,7 @@ Student site (e.g. example.com):
 - Project root: `student`        (this ignores the root app.js / server.cjs)
 - Build command: `npm install --include=dev && npm run build`
 - Publish / output directory: `dist`
-- Node version: 22 or 24
+- Node version: 22 (the project requires >=22.12.0 <23)
 
 Admin site (e.g. admin.example.com): same, with Project root `admin`.
 
@@ -47,7 +47,7 @@ from `student/src` and `admin/src` and publish `dist`.
 - Build command: `npm install --include=dev && npm run build`
 - Start command: `npm start`
 - Startup / entry file: `server.cjs`   (NOT hosting/server.cjs - that folder is deleted)
-- Node version: 22 or 24
+- Node version: 22 (the project requires >=22.12.0 <23)
 
 ## Why `--include=dev`
 Vite, Tailwind and the React plugin are devDependencies. Hostinger often sets NODE_ENV=production,

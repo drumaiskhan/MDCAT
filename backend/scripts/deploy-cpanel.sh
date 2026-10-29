@@ -27,8 +27,8 @@ ssh "${ssh_args[@]}" "$remote" "bash -s -- '$CPANEL_API_DIR' '${CPANEL_NODE_ENV:
 set -euo pipefail
 cd "$1"
 if [[ -n "$2" ]]; then source "$2"; fi
-node -e 'if(+process.versions.node.split(".")[0]!==24)process.exit(1)' || { echo 'Node 24 is not active. Set CPANEL_NODE_ENV to the activate script shown in cPanel.'; exit 1; }
-npx --yes npm@12.2.1 install --omit=dev --no-audit --no-fund
+node -e 'if(+process.versions.node.split(".")[0]!==22)process.exit(1)' || { echo 'Node 22 is not active. Set CPANEL_NODE_ENV to the activate script shown in cPanel.'; exit 1; }
+npx --yes npm@10.9.7 install --omit=dev --no-audit --no-fund
 mkdir -p tmp
 touch tmp/restart.txt
 REMOTE

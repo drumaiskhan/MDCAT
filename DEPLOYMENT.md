@@ -44,7 +44,7 @@ If DNS is managed at cPanel, add the `www`/`admin` records pointing to Hostinger
 2. **Create the database.** cPanel → *PostgreSQL® Databases*: create a database (e.g. `mdcat`), create a user with a strong password, and add the user to the database with **ALL PRIVILEGES**. cPanel prefixes both names with your account name (`acct_mdcat`, `acct_mdcatuser`). Use a NEW database; never share one with another site.
 3. **Upload the API.** cPanel → *File Manager* → your home folder (NOT `public_html`) → create folder `mdcat-api` → upload `deploy/zips/api-cpanel.zip` there → *Extract*. `app.js`, `package.json` and `dist/` must sit directly inside `mdcat-api` (hidden `.env.example` included).
 4. **Create the Node.js app.** cPanel → *Software* → *Setup Node.js App* → *Create Application*:
-   * Node.js version: **24.22.1** (any 24.x; the app refuses to run on other majors)
+   * Node.js version: **22.22.2** (any 22.x; the app refuses to run on other majors)
    * Application mode: **Production**
    * Application root: `mdcat-api`
    * Application URL: `api.example.com`
@@ -158,7 +158,7 @@ Settings → Secrets and variables → Actions:
 | Variable | `STUDENT_ORIGIN` | `https://example.com` (optional: fixes canonical/sitemap/robots) |
 | Variable | `CPANEL_SSH_PORT` | default 22 |
 | Variable | `CPANEL_API_DIR` | `/home2/ACCOUNT/mdcat-api` |
-| Variable | `CPANEL_NODE_ENV` | optional: `/home2/ACCOUNT/nodevenv/mdcat-api/24/bin/activate` |
+| Variable | `CPANEL_NODE_ENV` | optional: `/home2/ACCOUNT/nodevenv/mdcat-api/22/bin/activate` |
 
 Create a GitHub **Environment** `cpanel-production` (optionally with required reviewers). In repo *Settings → Actions → General → Workflow permissions* nothing special is needed.
 
