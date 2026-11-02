@@ -17,13 +17,15 @@ concurrency:
 jobs:
   deploy-api:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     environment: cpanel-production
 
     steps:
+      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Node setup
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,13 +35,16 @@ jobs:
       - name: Install npm version
         run: npm install --global npm@10.9.7
 
+      # 3. Install dependencies
       - name: Install dependencies
         run: npm ci
 
+      # 4. Build API
       - name: Build API
         run: npm run build --workspace=@workspace/api-server
 
-      - name: Package API with deployment metadata
+      # 5. Package API
+      - name: Package API
         shell: bash
         env:
           DEPLOY_COMMIT: ${{ github.sha }}
@@ -58,7 +63,7 @@ jobs:
           fs.mkdirSync(out, { recursive: true });
 
           if (!fs.existsSync('backend/dist/index.mjs')) {
-            throw new Error('API build output missing: backend/dist/index.mjs');
+            throw new Error('Missing backend/dist/index.mjs');
           }
 
           fs.cpSync('backend/dist', `${out}/dist`, {
@@ -91,7 +96,7 @@ jobs:
               backendPkg.devDependencies?.[name];
 
             if (!version) {
-              throw new Error(`Missing API runtime dependency: ${name}`);
+              throw new Error(`Missing runtime dependency: ${name}`);
             }
 
             dependencies[name] = version;
@@ -99,23 +104,19 @@ jobs:
 
           fs.writeFileSync(
             `${out}/package.json`,
-            JSON.stringify(
-              {
-                name: 'mdcat-api-runtime',
-                private: true,
-                main: 'app.js',
-                scripts: {
-                  start: 'node app.js',
-                },
-                engines: {
-                  node: '>=22.12.0 <23',
-                },
-                packageManager: 'npm@10.9.7',
-                dependencies,
+            JSON.stringify({
+              name: 'mdcat-api-runtime',
+              private: true,
+              main: 'app.js',
+              scripts: {
+                start: 'node app.js',
               },
-              null,
-              2
-            ) + '\n'
+              engines: {
+                node: '>=22.12.0 <23',
+              },
+              packageManager: 'npm@10.9.7',
+              dependencies,
+            }, null, 2) + '\n'
           );
 
           const metadata = {
@@ -139,7 +140,7 @@ jobs:
 
           ${Object.entries(metadata)
             .map(([key, value]) =>
-              `process.env.${key} = ${JSON.stringify(value)};`
+              \`process.env.\${key} = \${JSON.stringify(value)};\`
             )
             .join('\n')}
 
@@ -157,18 +158,20 @@ jobs:
             `${out}/.env.example`
           );
 
-          console.log('API package created successfully.');
-          console.log('Deployment commit:', metadata.DEPLOY_COMMIT);
+          console.log('API package created.');
+          console.log('Commit:', metadata.DEPLOY_COMMIT);
           console.log('Deployment time:', metadata.DEPLOYED_AT);
-          console.log('Deployment run ID:', metadata.DEPLOY_RUN_ID);
+          console.log('Run ID:', metadata.DEPLOY_RUN_ID);
           NODE
 
+      # 6. Install FTP client
       - name: Install lftp
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lftp
 
-      - name: Deploy API over FTPS
+      # 7. Upload files, then restart Passenger
+      - name: Deploy and restart Passenger
         shell: bash
         env:
           FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
@@ -188,12 +191,19 @@ jobs:
 
           FTP_PORT="${FTP_PORT:-21}"
 
+          echo "Connecting to cPanel FTP..."
+
           lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+
           set ftp:ssl-force true
           set ftp:ssl-protect-data true
+          set ftp:passive-mode true
           set net:max-retries 3
           set net:timeout 30
+          set cmd:fail-exit yes
+
+          echo "Uploading API files..."
 
           mirror -R --parallel=4 --verbose \
             --exclude-glob .env \
@@ -203,30 +213,66 @@ jobs:
             --exclude-glob tmp/ \
             deploy/api-cpanel/ "$FTP_TARGET"
 
-          bye
-          EOF
-
-      - name: Restart Passenger app
-        shell: bash
-        env:
-          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
-          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
-          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
-          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
-          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
-        run: |
-          set -euo pipefail
-
-          FTP_PORT="${FTP_PORT:-21}"
-
-          lftp -p "$FTP_PORT" \
-            -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
-          set ftp:ssl-force true
-          set ftp:ssl-protect-data true
-          set net:max-retries 3
-          set net:timeout 30
+          echo "API upload finished."
+          echo "Triggering Passenger restart..."
 
           put /dev/null -o "$FTP_TARGET/tmp/restart.txt"
 
+          echo "Passenger restart signal sent."
+
           bye
           EOF
+
+      # 8. Verify actual live deployment
+      - name: Verify live API deployment
+        shell: bash
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          API_URL="https://api.site.medschoolproffs.live/api/healthz"
+
+          echo "Waiting for Passenger to restart..."
+
+          for attempt in $(seq 1 30); do
+
+            RESPONSE="$(curl \
+              --silent \
+              --show-error \
+              --fail \
+              --connect-timeout 5 \
+              --max-time 10 \
+              "$API_URL" 2>/dev/null || true)"
+
+            if [[ -n "$RESPONSE" ]] && \
+              echo "$RESPONSE" | jq -e \
+                --arg commit "$DEPLOY_COMMIT" \
+                --arg run "$DEPLOY_RUN_ID" \
+                '.version == $commit and .deploymentId == $run' \
+                >/dev/null 2>&1; then
+
+              echo "=================================="
+              echo "DEPLOYMENT VERIFIED SUCCESSFULLY"
+              echo "=================================="
+
+              echo "$RESPONSE" | jq .
+
+              exit 0
+            fi
+
+            echo "Attempt $attempt/30: Waiting for new deployment..."
+
+            sleep 3
+          done
+
+          echo "=================================="
+          echo "DEPLOYMENT VERIFICATION FAILED"
+          echo "=================================="
+
+          echo "Expected commit: $DEPLOY_COMMIT"
+          echo "Expected run ID: $DEPLOY_RUN_ID"
+          echo "Latest API response: $RESPONSE"
+
+          exit 1
