@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
 
       - name: Build API
-        run: npm run build --workspace=backend
+        run: npm run build --workspace=@workspace/api-server
 
       - name: Package API
         run: npm run package:hosting
