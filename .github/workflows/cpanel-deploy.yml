@@ -1,16 +1,16 @@
-
 name: Deploy MDCAT API to cPanel
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mdcat-api-deploy
+  group: mdcat-api-cpanel-deploy
   cancel-in-progress: false
 
 jobs:
@@ -20,21 +20,110 @@ jobs:
     environment: cpanel-production
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm install --global npm@10.9.7
-      - run: npm ci
+      - name: Install npm version
+        run: npm install --global npm@10.9.7
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build API
-        run: npm run build --workspace=backend
+        run: npm run build --workspace=@workspace/api-server
 
-      - name: Package API
-        run: npm run package:hosting
+      - name: Package API only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const out = 'deploy/api-cpanel';
+
+          fs.rmSync(out, { recursive: true, force: true });
+          fs.mkdirSync(out, { recursive: true });
+
+          if (!fs.existsSync('backend/dist/index.mjs')) {
+            throw new Error('API build output missing: backend/dist/index.mjs');
+          }
+
+          fs.cpSync('backend/dist', `${out}/dist`, {
+            recursive: true,
+            filter: source => !source.endsWith('.map'),
+          });
+
+          if (fs.existsSync('backend/assets')) {
+            fs.cpSync('backend/assets', `${out}/assets`, {
+              recursive: true,
+            });
+          }
+
+          const backendPkg = JSON.parse(
+            fs.readFileSync('backend/package.json', 'utf8')
+          );
+
+          const dependencies = {};
+
+          for (const name of [
+            '@napi-rs/canvas',
+            'pdfjs-dist',
+            'nodemailer',
+            'pino',
+            'pino-http',
+            'pino-pretty',
+          ]) {
+            const version =
+              backendPkg.dependencies?.[name] ??
+              backendPkg.devDependencies?.[name];
+
+            if (!version) {
+              throw new Error(`Missing API runtime dependency: ${name}`);
+            }
+
+            dependencies[name] = version;
+          }
+
+          fs.writeFileSync(
+            `${out}/package.json`,
+            JSON.stringify(
+              {
+                name: 'mdcat-api-runtime',
+                private: true,
+                main: 'app.js',
+                scripts: {
+                  start: 'node app.js',
+                },
+                engines: {
+                  node: '>=22.12.0 <23',
+                },
+                packageManager: 'npm@10.9.7',
+                dependencies,
+              },
+              null,
+              2
+            ) + '\n'
+          );
+
+          fs.writeFileSync(
+            `${out}/app.js`,
+            "const path=require('node:path');const {pathToFileURL}=require('node:url');process.chdir(__dirname);process.env.NODE_ENV=process.env.NODE_ENV||'production';import(pathToFileURL(path.join(__dirname,'dist/index.mjs')).href).catch(e=>{console.error(e);process.exit(1);});\n"
+          );
+
+          fs.copyFileSync(
+            'hosting.env.example',
+            `${out}/.env.example`
+          );
+
+          console.log('API package created at deploy/api-cpanel');
+          NODE
 
       - name: Install lftp
         run: |
@@ -42,26 +131,28 @@ jobs:
           sudo apt-get install -y -qq lftp
 
       - name: Deploy API over FTPS
+        shell: bash
         env:
           FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
           FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
           FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
           FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
           FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
-        shell: bash
         run: |
           set -euo pipefail
 
           for v in FTP_SERVER FTP_USER FTP_PASS FTP_TARGET; do
-            test -n "${!v}" || {
-              echo "Missing configuration: $v"
+            if [[ -z "${!v}" ]]; then
+              echo "Missing GitHub secret: $v"
               exit 1
-            }
+            fi
           done
+
+          FTP_PORT="${FTP_PORT:-21}"
 
           test -d deploy/api-cpanel
 
-          lftp -p "${FTP_PORT:-21}" \
+          lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
           set ftp:ssl-force true
           set ftp:ssl-protect-data true
@@ -70,6 +161,7 @@ jobs:
 
           mirror -R --parallel=4 --verbose \
             --exclude-glob .env \
+            --exclude-glob .env.* \
             --exclude-glob node_modules/ \
             --exclude-glob uploads/ \
             --exclude-glob tmp/ \
@@ -77,5 +169,31 @@ jobs:
 
           mkdir -p "$FTP_TARGET/tmp"
           put -O "$FTP_TARGET/tmp" /dev/null
+          bye
+          EOF
+
+      - name: Restart Passenger app
+        shell: bash
+        env:
+          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
+          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
+          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
+        run: |
+          set -euo pipefail
+
+          FTP_PORT="${FTP_PORT:-21}"
+
+          lftp -p "$FTP_PORT" \
+            -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set net:max-retries 3
+          set net:timeout 30
+
+          mkdir -p "$FTP_TARGET/tmp"
+          put -O "$FTP_TARGET/tmp" /dev/null
+          mv "$FTP_TARGET/tmp/null" "$FTP_TARGET/tmp/restart.txt"
           bye
           EOF
