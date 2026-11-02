@@ -1,3 +1,4 @@
+
 name: Deploy MDCAT API to cPanel
 
 on:
@@ -38,6 +39,45 @@ jobs:
       - name: Build API
         run: npm run build --workspace=@workspace/api-server
 
+      - name: Inject deployment metadata
+        shell: bash
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          export DEPLOYED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const file = 'backend/dist/index.mjs';
+
+          let content = fs.readFileSync(file, 'utf8');
+
+          const replacements = {
+            '"__DEPLOY_COMMIT__"': JSON.stringify(process.env.DEPLOY_COMMIT),
+            '"__DEPLOYED_AT__"': JSON.stringify(process.env.DEPLOYED_AT),
+            '"__DEPLOY_RUN_ID__"': JSON.stringify(process.env.DEPLOY_RUN_ID),
+          };
+
+          for (const [placeholder, value] of Object.entries(replacements)) {
+            if (!content.includes(placeholder)) {
+              throw new Error(`Placeholder not found: ${placeholder}`);
+            }
+
+            content = content.replaceAll(placeholder, value);
+          }
+
+          fs.writeFileSync(file, content);
+
+          console.log('Deployment metadata injected successfully.');
+          console.log('Commit:', process.env.DEPLOY_COMMIT);
+          console.log('Deployment time:', process.env.DEPLOYED_AT);
+          console.log('Run ID:', process.env.DEPLOY_RUN_ID);
+          NODE
+
       - name: Package API only
         shell: bash
         run: |
@@ -52,7 +92,7 @@ jobs:
           fs.mkdirSync(out, { recursive: true });
 
           if (!fs.existsSync('backend/dist/index.mjs')) {
-            throw new Error('API build output missing: backend/dist/index.mjs');
+            throw new Error('API build output missing');
           }
 
           fs.cpSync('backend/dist', `${out}/dist`, {
@@ -122,7 +162,7 @@ jobs:
             `${out}/.env.example`
           );
 
-          console.log('API package created at deploy/api-cpanel');
+          console.log('API package created successfully.');
           NODE
 
       - name: Install lftp
@@ -150,8 +190,6 @@ jobs:
 
           FTP_PORT="${FTP_PORT:-21}"
 
-          test -d deploy/api-cpanel
-
           lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
           set ftp:ssl-force true
@@ -168,7 +206,6 @@ jobs:
             deploy/api-cpanel/ "$FTP_TARGET"
 
           mkdir -p "$FTP_TARGET/tmp"
-          put -O "$FTP_TARGET/tmp" /dev/null
           bye
           EOF
 
@@ -193,7 +230,6 @@ jobs:
           set net:timeout 30
 
           mkdir -p "$FTP_TARGET/tmp"
-          put -O "$FTP_TARGET/tmp" /dev/null
-          mv "$FTP_TARGET/tmp/null" "$FTP_TARGET/tmp/restart.txt"
+          put /dev/null -o "$FTP_TARGET/tmp/restart.txt"
           bye
           EOF
