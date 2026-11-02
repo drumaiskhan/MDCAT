@@ -174,7 +174,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq lftp
 
-      # 7. Upload API and restart Passenger
+      # 7. Upload API and force Passenger restart
       - name: Deploy and restart Passenger
         shell: bash
         env:
@@ -218,16 +218,22 @@ jobs:
             deploy/api-cpanel/ "$FTP_TARGET"
 
           echo "API upload completed."
-          echo "Triggering Passenger restart..."
 
-          put /dev/null -o "$FTP_TARGET/tmp/restart.txt"
+          echo "Forcing a fresh Passenger restart signal..."
 
-          echo "Passenger restart signal sent."
+          put -O "$FTP_TARGET/tmp" /dev/null
+          mv "$FTP_TARGET/tmp/null" "$FTP_TARGET/tmp/restart.txt"
+
+          echo "Passenger restart signal written."
+
+          ls -l "$FTP_TARGET/tmp/restart.txt"
+
+          echo "Restart signal command completed."
 
           bye
           EOF
 
-      # 8. Verify actual deployment
+      # 8. Verify actual live deployment
       - name: Verify live API deployment
         shell: bash
         env:
@@ -239,6 +245,8 @@ jobs:
           API_URL="https://api.site.medschoolproffs.live/api/healthz"
 
           echo "Waiting for Passenger to restart..."
+
+          RESPONSE=""
 
           for attempt in $(seq 1 30); do
 
