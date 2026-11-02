@@ -1,85 +1,81 @@
-name: Build and deploy to cPanel
+
+name: Deploy MDCAT API to cPanel
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: Deploy the tested build to the configured cPanel destinations
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: cpanel-${{ github.ref }}
+  group: mdcat-api-deploy
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy-api:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: cpanel-production
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: .nvmrc
           cache: npm
+
       - run: npm install --global npm@10.9.7
       - run: npm ci
-      - run: npm run test:mdcat && npm run test:auth
-      - run: npm run build
-      - run: npm run package:hosting
-        env:
-          API_URL: ${{ vars.CPANEL_API_ORIGIN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cpanel-build
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 14
-          path: |
-            admin/hosting/
-            student/hosting/
-            backend/hosting/
 
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: cpanel-production
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: cpanel-build
-          path: release
-      - name: Configure SSH identity and verified server key
+      - name: Build API
+        run: npm run build --workspace=backend
+
+      - name: Package API
+        run: npm run package:hosting
+
+      - name: Install lftp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+
+      - name: Deploy API over FTPS
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
+          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
+          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
-      - name: Deploy and restart Passenger
-        run: bash backend/scripts/deploy-cpanel.sh release
-        env:
-          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-          CPANEL_USER: ${{ secrets.CPANEL_USER }}
-          CPANEL_SSH_PORT: ${{ vars.CPANEL_SSH_PORT }}
-          CPANEL_API_DIR: ${{ vars.CPANEL_API_DIR }}
-          CPANEL_STUDENT_DIR: ${{ vars.CPANEL_STUDENT_DIR }}
-          CPANEL_ADMIN_DIR: ${{ vars.CPANEL_ADMIN_DIR }}
-          CPANEL_NODE_ENV: ${{ vars.CPANEL_NODE_ENV }}
-          CPANEL_API_ORIGIN: ${{ vars.CPANEL_API_ORIGIN }}
-      - name: Remove runner SSH identity
-        if: always()
-        run: rm -f ~/.ssh/id_ed25519
+
+          for v in FTP_SERVER FTP_USER FTP_PASS FTP_TARGET; do
+            test -n "${!v}" || {
+              echo "Missing configuration: $v"
+              exit 1
+            }
+          done
+
+          test -d deploy/api-cpanel
+
+          lftp -p "${FTP_PORT:-21}" \
+            -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set net:max-retries 3
+          set net:timeout 30
+
+          mirror -R --parallel=4 --verbose \
+            --exclude-glob .env \
+            --exclude-glob node_modules/ \
+            --exclude-glob uploads/ \
+            --exclude-glob tmp/ \
+            deploy/api-cpanel/ "$FTP_TARGET"
+
+          mkdir -p "$FTP_TARGET/tmp"
+          put -O "$FTP_TARGET/tmp" /dev/null
+          bye
+          EOF
