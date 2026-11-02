@@ -1,81 +1,60 @@
-
-name: Deploy MDCAT API to cPanel
+name: Build and Deploy API to cPanel
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mdcat-api-deploy
+  group: mdcat-api-cpanel-deploy
   cancel-in-progress: false
 
 jobs:
-  deploy-api:
+  build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: cpanel-production
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm install --global npm@10.9.7
-      - run: npm ci
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Build API
-        run: npm run build --workspace=backend
+        run: npm run build --workspace=@workspace/api-server
 
-      - name: Package API
-        run: npm run package:hosting
+      - name: Deploy API to cPanel via FTPS
+        uses: appleboy/ftp-action@v1.0.0
+        with:
+          host: ${{ secrets.CPANEL_FTP_SERVER }}
+          username: ${{ secrets.CPANEL_FTP_USERNAME }}
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          port: ${{ secrets.CPANEL_FTP_PORT }}
+          protocol: ftps
+          localDir: backend/
+          remoteDir: ${{ secrets.CPANEL_FTP_TARGET }}
+          exclude: |
+            **/.env
+            **/.env.*
+            **/node_modules/**
+            **/.git/**
+            **/uploads/**
+            **/tmp/**
 
-      - name: Install lftp
+      - name: Restart Passenger app
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp
-
-      - name: Deploy API over FTPS
-        env:
-          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
-          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
-          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
-          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
-          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          for v in FTP_SERVER FTP_USER FTP_PASS FTP_TARGET; do
-            test -n "${!v}" || {
-              echo "Missing configuration: $v"
-              exit 1
-            }
-          done
-
-          test -d deploy/api-cpanel
-
-          lftp -p "${FTP_PORT:-21}" \
-            -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
-          set ftp:ssl-force true
-          set ftp:ssl-protect-data true
-          set net:max-retries 3
-          set net:timeout 30
-
-          mirror -R --parallel=4 --verbose \
-            --exclude-glob .env \
-            --exclude-glob node_modules/ \
-            --exclude-glob uploads/ \
-            --exclude-glob tmp/ \
-            deploy/api-cpanel/ "$FTP_TARGET"
-
-          mkdir -p "$FTP_TARGET/tmp"
-          put -O "$FTP_TARGET/tmp" /dev/null
-          bye
-          EOF
+          curl --fail --silent --show-error \
+            --user "${{ secrets.CPANEL_FTP_USERNAME }}:${{ secrets.CPANEL_FTP_PASSWORD }}" \
+            "ftp://${{ secrets.CPANEL_FTP_SERVER }}:${{ secrets.CPANEL_FTP_PORT }}/${{ secrets.CPANEL_FTP_TARGET }}/tmp/restart.txt" \
+            --quote "DELE /${{ secrets.CPANEL_FTP_TARGET }}/tmp/restart.txt" || true
