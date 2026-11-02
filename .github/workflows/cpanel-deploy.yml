@@ -92,7 +92,7 @@ jobs:
           fs.mkdirSync(out, { recursive: true });
 
           if (!fs.existsSync('backend/dist/index.mjs')) {
-            throw new Error('API build output missing');
+            throw new Error('API build output missing: backend/dist/index.mjs');
           }
 
           fs.cpSync('backend/dist', `${out}/dist`, {
@@ -162,7 +162,7 @@ jobs:
             `${out}/.env.example`
           );
 
-          console.log('API package created successfully.');
+          console.log('API package created at deploy/api-cpanel');
           NODE
 
       - name: Install lftp
@@ -190,6 +190,8 @@ jobs:
 
           FTP_PORT="${FTP_PORT:-21}"
 
+          test -d deploy/api-cpanel
+
           lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
           set ftp:ssl-force true
@@ -205,7 +207,6 @@ jobs:
             --exclude-glob tmp/ \
             deploy/api-cpanel/ "$FTP_TARGET"
 
-          mkdir -p "$FTP_TARGET/tmp"
           bye
           EOF
 
@@ -229,7 +230,7 @@ jobs:
           set net:max-retries 3
           set net:timeout 30
 
-          mkdir -p "$FTP_TARGET/tmp"
           put /dev/null -o "$FTP_TARGET/tmp/restart.txt"
+
           bye
           EOF
