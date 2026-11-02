@@ -21,11 +21,11 @@ jobs:
     environment: cpanel-production
 
     steps:
-      # 1. Checkout
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Node setup
+      # 2. Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -104,19 +104,23 @@ jobs:
 
           fs.writeFileSync(
             `${out}/package.json`,
-            JSON.stringify({
-              name: 'mdcat-api-runtime',
-              private: true,
-              main: 'app.js',
-              scripts: {
-                start: 'node app.js',
+            JSON.stringify(
+              {
+                name: 'mdcat-api-runtime',
+                private: true,
+                main: 'app.js',
+                scripts: {
+                  start: 'node app.js',
+                },
+                engines: {
+                  node: '>=22.12.0 <23',
+                },
+                packageManager: 'npm@10.9.7',
+                dependencies,
               },
-              engines: {
-                node: '>=22.12.0 <23',
-              },
-              packageManager: 'npm@10.9.7',
-              dependencies,
-            }, null, 2) + '\n'
+              null,
+              2
+            ) + '\n'
           );
 
           const metadata = {
@@ -140,7 +144,7 @@ jobs:
 
           ${Object.entries(metadata)
             .map(([key, value]) =>
-              \`process.env.\${key} = \${JSON.stringify(value)};\`
+              `process.env.${key} = ${JSON.stringify(value)};`
             )
             .join('\n')}
 
@@ -158,10 +162,10 @@ jobs:
             `${out}/.env.example`
           );
 
-          console.log('API package created.');
-          console.log('Commit:', metadata.DEPLOY_COMMIT);
+          console.log('API package created successfully.');
+          console.log('Deployment commit:', metadata.DEPLOY_COMMIT);
           console.log('Deployment time:', metadata.DEPLOYED_AT);
-          console.log('Run ID:', metadata.DEPLOY_RUN_ID);
+          console.log('Deployment run ID:', metadata.DEPLOY_RUN_ID);
           NODE
 
       # 6. Install FTP client
@@ -170,7 +174,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq lftp
 
-      # 7. Upload files, then restart Passenger
+      # 7. Upload API and restart Passenger
       - name: Deploy and restart Passenger
         shell: bash
         env:
@@ -191,7 +195,7 @@ jobs:
 
           FTP_PORT="${FTP_PORT:-21}"
 
-          echo "Connecting to cPanel FTP..."
+          echo "Connecting to cPanel..."
 
           lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
@@ -213,7 +217,7 @@ jobs:
             --exclude-glob tmp/ \
             deploy/api-cpanel/ "$FTP_TARGET"
 
-          echo "API upload finished."
+          echo "API upload completed."
           echo "Triggering Passenger restart..."
 
           put /dev/null -o "$FTP_TARGET/tmp/restart.txt"
@@ -223,7 +227,7 @@ jobs:
           bye
           EOF
 
-      # 8. Verify actual live deployment
+      # 8. Verify actual deployment
       - name: Verify live API deployment
         shell: bash
         env:
