@@ -39,7 +39,7 @@ jobs:
       - name: Build API
         run: npm run build --workspace=@workspace/api-server
 
-      - name: Inject deployment metadata
+      - name: Package API with deployment metadata
         shell: bash
         env:
           DEPLOY_COMMIT: ${{ github.sha }}
@@ -48,40 +48,6 @@ jobs:
           set -euo pipefail
 
           export DEPLOYED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-
-          const file = 'backend/dist/index.mjs';
-
-          let content = fs.readFileSync(file, 'utf8');
-
-          const replacements = {
-            '"__DEPLOY_COMMIT__"': JSON.stringify(process.env.DEPLOY_COMMIT),
-            '"__DEPLOYED_AT__"': JSON.stringify(process.env.DEPLOYED_AT),
-            '"__DEPLOY_RUN_ID__"': JSON.stringify(process.env.DEPLOY_RUN_ID),
-          };
-
-          for (const [placeholder, value] of Object.entries(replacements)) {
-            if (!content.includes(placeholder)) {
-              throw new Error(`Placeholder not found: ${placeholder}`);
-            }
-
-            content = content.replaceAll(placeholder, value);
-          }
-
-          fs.writeFileSync(file, content);
-
-          console.log('Deployment metadata injected successfully.');
-          console.log('Commit:', process.env.DEPLOY_COMMIT);
-          console.log('Deployment time:', process.env.DEPLOYED_AT);
-          console.log('Run ID:', process.env.DEPLOY_RUN_ID);
-          NODE
-
-      - name: Package API only
-        shell: bash
-        run: |
-          set -euo pipefail
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -152,17 +118,49 @@ jobs:
             ) + '\n'
           );
 
-          fs.writeFileSync(
-            `${out}/app.js`,
-            "const path=require('node:path');const {pathToFileURL}=require('node:url');process.chdir(__dirname);process.env.NODE_ENV=process.env.NODE_ENV||'production';import(pathToFileURL(path.join(__dirname,'dist/index.mjs')).href).catch(e=>{console.error(e);process.exit(1);});\n"
-          );
+          const metadata = {
+            DEPLOY_COMMIT: process.env.DEPLOY_COMMIT,
+            DEPLOYED_AT: process.env.DEPLOYED_AT,
+            DEPLOY_RUN_ID: process.env.DEPLOY_RUN_ID,
+          };
+
+          for (const [key, value] of Object.entries(metadata)) {
+            if (!value) {
+              throw new Error(`Missing deployment metadata: ${key}`);
+            }
+          }
+
+          const appJs = `
+          const path = require('node:path');
+          const { pathToFileURL } = require('node:url');
+
+          process.chdir(__dirname);
+          process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+
+          ${Object.entries(metadata)
+            .map(([key, value]) =>
+              `process.env.${key} = ${JSON.stringify(value)};`
+            )
+            .join('\n')}
+
+          import(pathToFileURL(path.join(__dirname, 'dist/index.mjs')).href)
+            .catch(error => {
+              console.error('MDCAT API startup failed:', error);
+              process.exit(1);
+            });
+          `;
+
+          fs.writeFileSync(`${out}/app.js`, appJs);
 
           fs.copyFileSync(
             'hosting.env.example',
             `${out}/.env.example`
           );
 
-          console.log('API package created at deploy/api-cpanel');
+          console.log('API package created successfully.');
+          console.log('Deployment commit:', metadata.DEPLOY_COMMIT);
+          console.log('Deployment time:', metadata.DEPLOYED_AT);
+          console.log('Deployment run ID:', metadata.DEPLOY_RUN_ID);
           NODE
 
       - name: Install lftp
@@ -189,8 +187,6 @@ jobs:
           done
 
           FTP_PORT="${FTP_PORT:-21}"
-
-          test -d deploy/api-cpanel
 
           lftp -p "$FTP_PORT" \
             -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
