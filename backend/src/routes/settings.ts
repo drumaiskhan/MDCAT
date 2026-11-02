@@ -5,6 +5,7 @@ import { getAllSettings, setSetting, THEME_KEYS, DEFAULT_THEME } from "../lib/se
 import { requireAdmin } from "../middlewares/auth";
 import { resolveFileUrl, testCloudinaryConnection, setCachedCloudinaryCloudName } from "../lib/storage";
 import { sendTestEmail, BREVO_MAX_SLOTS } from "../lib/email";
+import { testAiProviders } from "../lib/aiExplain";
 import { TRIAL_FEATURE_OPTIONS } from "../lib/trial";
 import { parseDeviceLimit, MAX_DEVICES_CEILING } from "../lib/deviceSessions";
 
@@ -486,6 +487,14 @@ router.post("/admin/settings/test-email", requireAdmin, async (req, res): Promis
     // what went wrong, not a thrown ApiRequestError.
     res.json({ ok: false, error: err instanceof Error ? err.message : "Could not send test email" });
   }
+});
+
+// Same reasoning as test-storage/test-email: "a key is saved" is not "the key
+// works". Pings each configured AI provider individually (no failover) and
+// returns { label, provider, model, ok, ms, error? } per provider — never keys.
+router.post("/admin/settings/test-ai", requireAdmin, async (_req, res): Promise<void> => {
+  const results = await testAiProviders();
+  res.json({ results });
 });
 
 export default router;

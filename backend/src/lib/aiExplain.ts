@@ -797,6 +797,28 @@ export async function runPrompt(prompt: string, maxTokens = 400, jsonMode: JsonM
   throw new Error(`All configured AI providers failed:\n${failures.join("\n")}`);
 }
 
+export interface AiProviderTestResult { label: string; provider: string; model: string; ok: boolean; ms: number; error?: string }
+
+/**
+ * Admin "Test AI connection": pings EVERY configured candidate (DB slots plus
+ * env-var fallbacks) on its own with a tiny prompt, so a dead backup key shows
+ * up before an outage makes it matter. Never returns API keys, and each error
+ * is trimmed so a provider's raw response can't flood the page.
+ */
+export async function testAiProviders(): Promise<AiProviderTestResult[]> {
+  const candidates = await resolveProviders();
+  return Promise.all(candidates.map(async (c): Promise<AiProviderTestResult> => {
+    const started = Date.now();
+    try {
+      await runOnProvider(c, "Reply with the single word OK.", 64, false);
+      return { label: c.label, provider: c.provider, model: c.model, ok: true, ms: Date.now() - started };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { label: c.label, provider: c.provider, model: c.model, ok: false, ms: Date.now() - started, error: message.slice(0, 300) };
+    }
+  }));
+}
+
 // 700 (up from the old 400) gives a reasoning-capable model enough headroom
 // that its invisible "thinking" doesn't crowd out the ~150-word answer the
 // prompt asks for — see NO_REASONING_INSTRUCTION and runPrompt's retry

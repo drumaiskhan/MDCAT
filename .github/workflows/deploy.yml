@@ -1,4 +1,4 @@
-name: Test, build and deploy API (cPanel)
+name: Test, build and deploy to cPanel (FTP)
 
 on:
   push:
@@ -6,9 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy the tested API build to cPanel (frontends are built by Hostinger from GitHub)
+        description: Upload the tested build to cPanel over FTP
         type: boolean
         default: false
+      package:
+        description: Which package to upload to CPANEL_FTP_TARGET
+        type: choice
+        options: [api-cpanel, student-hostinger, admin-hostinger]
+        default: api-cpanel
 
 permissions:
   contents: read
@@ -51,39 +56,52 @@ jobs:
             deploy/zips/
             deploy/README.txt
 
-  deploy-api:
+  deploy-ftp:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: cpanel-production
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: deploy-build
           path: release
-      - name: Configure SSH identity and verified server key
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+      - name: Upload over FTPS
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
+          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
+          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
+          PACKAGE: ${{ inputs.package }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
-      - name: Deploy API to cPanel and restart Passenger
-        run: bash backend/scripts/deploy-cpanel.sh release
-        env:
-          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-          CPANEL_USER: ${{ secrets.CPANEL_USER }}
-          CPANEL_SSH_PORT: ${{ vars.CPANEL_SSH_PORT }}
-          CPANEL_API_DIR: ${{ vars.CPANEL_API_DIR }}
-          CPANEL_NODE_ENV: ${{ vars.CPANEL_NODE_ENV }}
-          CPANEL_API_ORIGIN: ${{ vars.API_ORIGIN }}
-      - name: Remove runner SSH identity
-        if: always()
-        run: rm -f ~/.ssh/id_ed25519
+          for v in FTP_SERVER FTP_USER FTP_PASS FTP_TARGET; do test -n "${!v}" || { echo "Secret for $v is empty"; exit 1; }; done
+          src="release/$PACKAGE"
+          test -d "$src" || { echo "Missing $src"; exit 1; }
+          extra=""
+          if [ "$PACKAGE" = "api-cpanel" ]; then
+            # Keep server-managed files; never overwrite .env, uploads or node_modules.
+            extra="--exclude-glob .env --exclude-glob node_modules/ --exclude-glob uploads/ --exclude-glob tmp/"
+          fi
+          lftp -p "${FTP_PORT:-21}" -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set net:max-retries 3
+          set net:timeout 30
+          mirror -R --parallel=4 --verbose $extra "$src" "$FTP_TARGET"
+          bye
+          EOF
+          if [ "$PACKAGE" = "api-cpanel" ]; then
+            mkdir -p /tmp/restart && : > /tmp/restart/restart.txt
+            lftp -p "${FTP_PORT:-21}" -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+          set ftp:ssl-force true
+          mkdir -p "$FTP_TARGET/tmp"
+          put -O "$FTP_TARGET/tmp" /tmp/restart/restart.txt
+          bye
+          EOF
+          fi

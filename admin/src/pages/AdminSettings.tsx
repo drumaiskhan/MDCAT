@@ -8,11 +8,11 @@
 // Platform description that sat next to them, now live here; the dead
 // "Support email" field (nothing ever read it — the footer uses Contact
 // email on Site content) is gone.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from 'wouter';
 import {
-  Bell, Cloud, ClipboardCheck, Copy, FileStack, FolderOpen, Gift, Globe, KeyRound, Library, ListChecks, Mail, Megaphone, Palette, Plus,
+  Bell, Cloud, ClipboardCheck, CheckCircle2, Copy, FileStack, FolderOpen, Gift, Globe, KeyRound, Library, ListChecks, Mail, Megaphone, Palette, Plus,
   Repeat, Send, Server, Settings, ShieldCheck, Shuffle, Sparkles, Stethoscope, Swords, Target, ToggleRight, Trash2, UploadCloud, Users, Wand2, Wifi, X, Zap, GraduationCap,
 } from 'lucide-react';
 import { readableForegroundHsl, DEFAULT_THEME } from '@/lib/theme';
@@ -80,6 +80,11 @@ function AdminSettings() {
     onError: (err: unknown) => toast({ title: 'Could not run the test', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
   });
   const testingTarget = testEmail.isPending ? String(testEmail.variables?.slot ?? 'all') : null;
+
+  const testAi = useMutation({
+    mutationFn: settingsApi.testAi,
+    onError: (err: unknown) => toast({ title: 'Could not run the test', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
+  });
 
   const set = (key: string, value: string) => setForm({ ...values, [key]: value });
   const patch = (changes: Record<string, string>) => setForm({ ...values, ...changes });
@@ -158,6 +163,52 @@ function AdminSettings() {
 
   const inputRow = 'grid gap-4 sm:grid-cols-2';
 
+  // ---- Client-side checks (the API re-validates; this just saves a round trip
+  // and tells the admin which tab the problem is on) -------------------------
+  const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const isHttps = (v: string) => { try { return new URL(v).protocol === 'https:'; } catch { return false; } };
+  const issues: Array<{ tab: TabId; message: string }> = [];
+  if (values.APP_DOWNLOAD_URL?.trim() && !isHttps(values.APP_DOWNLOAD_URL.trim())) issues.push({ tab: 'general', message: 'App download link must be a full https:// link.' });
+  if ((values.PLATFORM_NAME || '').trim().length > 80) issues.push({ tab: 'general', message: 'Platform name must be 80 characters or fewer.' });
+  if (values.MAIL_FROM?.trim() && !isEmail(values.MAIL_FROM.trim())) issues.push({ tab: 'email', message: '"From" email is not a valid address.' });
+  if (emailProvider === 'smtp' && values.SMTP_PORT && !(Number(values.SMTP_PORT) >= 1 && Number(values.SMTP_PORT) <= 65535)) issues.push({ tab: 'email', message: 'SMTP port must be between 1 and 65535.' });
+  if (emailProvider === 'custom' && values.CUSTOM_EMAIL_API_URL?.trim() && !isHttps(values.CUSTOM_EMAIL_API_URL.trim())) issues.push({ tab: 'email', message: 'Custom email endpoint must be an https:// URL.' });
+  if (values.AI_PROVIDER === 'custom' && values.AI_BASE_URL?.trim() && !isHttps(values.AI_BASE_URL.trim())) issues.push({ tab: 'ai', message: 'Custom AI base URL must be an https:// URL.' });
+  if (values.DEFAULT_MAX_DEVICES?.trim() && !(Number.isInteger(Number(values.DEFAULT_MAX_DEVICES)) && Number(values.DEFAULT_MAX_DEVICES) >= 0 && Number(values.DEFAULT_MAX_DEVICES) <= 50)) issues.push({ tab: 'security', message: 'Device limit must be a whole number from 0 to 50.' });
+  if (values.TRIAL_DAILY_MCQ_LIMIT?.trim() && !(Number.isInteger(Number(values.TRIAL_DAILY_MCQ_LIMIT)) && Number(values.TRIAL_DAILY_MCQ_LIMIT) >= 0)) issues.push({ tab: 'access', message: 'Trial daily MCQ limit must be a whole number, 0 or more.' });
+  const tabIssues = issues.filter((i) => i.tab === tab);
+
+  const trySave = () => {
+    if (!dirty || save.isPending) return;
+    if (issues.length) {
+      setTab(issues[0].tab);
+      toast({ title: 'Fix this before saving', description: issues[0].message, variant: 'destructive' });
+      return;
+    }
+    save.mutate(values);
+  };
+
+  // Ctrl/Cmd+S saves; leaving the page with unsaved changes asks first.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); trySave(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  // Keep the open tab in the address bar so a refresh or shared link lands on it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('tab') !== tab) { url.searchParams.set('tab', tab); window.history.replaceState(window.history.state, '', url); }
+  }, [tab]);
+
   return <div className="mx-auto max-w-6xl">
     <SectionHeader eyebrow="Workspace" title="Platform settings" action={<span className="hidden text-[11px] text-muted-foreground sm:inline">Saved changes apply to every student instantly</span>} />
 
@@ -175,6 +226,7 @@ function AdminSettings() {
       </nav>
 
       <div className="min-w-0 space-y-5">
+        {tabIssues.length > 0 && <Callout tone="danger" title="Fix these before saving" testId="banner-settings-issues"><ul className="list-disc pl-4">{tabIssues.map((i) => <li key={i.message}>{i.message}</li>)}</ul></Callout>}
         {/* ------------------------------------------------------------ General */}
         {tab === 'general' && <>
           <Panel icon={Globe} title="Platform profile" description="The details students see across their study desk, the footer and link previews.">
@@ -377,6 +429,24 @@ function AdminSettings() {
             </div>
           </Panel>
 
+          <Panel icon={Wifi} title="Test AI connection" badge={testAi.data ? <StatusPill tone={testAi.data.results.length && testAi.data.results.every((r) => r.ok) ? 'green' : 'red'}>{testAi.data.results.filter((r) => r.ok).length} of {testAi.data.results.length} working</StatusPill> : undefined}
+            description="Sends a tiny test prompt to every configured provider on its own — the primary, each backup and any server env-var keys — so a dead backup shows up now, not during an outage. Save your changes first: tests use what's saved.">
+            <Button icon={Wifi} loading={testAi.isPending} disabled={dirty} onClick={() => testAi.mutate()} data-testid="button-test-ai">{testAi.isPending ? 'Testing…' : 'Test all providers'}</Button>
+            {dirty && <p className="mt-2 text-[11px] text-muted-foreground">You have unsaved changes — save them before testing.</p>}
+            {testAi.data && testAi.data.results.length === 0 && <div className="mt-4"><Callout tone="danger" title="No AI provider is configured">Add an API key above, or set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY on the server.</Callout></div>}
+            {testAi.data && testAi.data.results.length > 0 && <ul className="mt-4 space-y-2" data-testid="list-ai-test-results">
+              {testAi.data.results.map((r, i) => <li key={i} className={cn('rounded-xl border p-3 text-xs', r.ok ? 'border-primary/30 bg-background/60' : 'border-destructive/30 bg-destructive/10')}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {r.ok ? <CheckCircle2 size={14} className="text-primary" /> : <X size={14} className="text-destructive" />}
+                  <span className="font-extrabold capitalize">{r.label}</span>
+                  <span className="text-muted-foreground">{r.provider} · {r.model}</span>
+                  <span className="ml-auto text-[11px] text-muted-foreground">{r.ms} ms</span>
+                </div>
+                {!r.ok && r.error && <p className="mt-2 text-[11px] leading-4 text-destructive">{r.error}</p>}
+              </li>)}
+            </ul>}
+          </Panel>
+
           <Panel icon={Wand2} title="Auto-explain on import" description="Generate explanations and hints while MCQs are imported, instead of only on demand.">
             <ToggleRow title="Auto-generate explanations & hints on MCQ import" description='Uses the provider above (and backups). Every imported question without an explanation is queued automatically, landing as "AI generated — awaiting review", never auto-approved. Runs in the background.' checked={values.AI_AUTO_EXPLAIN_ON_IMPORT === 'true'} onChange={(on) => set('AI_AUTO_EXPLAIN_ON_IMPORT', on ? 'true' : 'false')} testId="checkbox-ai-auto-explain-import" />
             {values.AI_AUTO_EXPLAIN_ON_IMPORT === 'true' && <div className="mt-4 max-w-sm"><Field label={<>Bulk-generation model <span className="font-normal text-muted-foreground">(optional)</span></>} hint="A cheaper/faster model for high-volume imports. Blank uses the Model above."><TextInput value={values.AI_AUTO_EXPLAIN_MODEL || ''} onChange={(e) => set('AI_AUTO_EXPLAIN_MODEL', e.target.value)} placeholder="e.g. claude-haiku-4-5, gpt-4o-mini" data-testid="input-ai-auto-explain-model" /></Field></div>}
@@ -472,7 +542,7 @@ function AdminSettings() {
         {tab === 'storage' && <>
           {storageIssue && <Callout tone="danger" title="No file storage is configured" testId="banner-storage-warning">Every upload (favicon, payment QR code, payment proofs, team photos, MCQ images, books, notes) goes through Cloudinary — there's no fallback, so uploads fail until it's configured below.</Callout>}
           <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-4">
-            <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">The green “Saved” badge only means credentials were entered — it doesn't prove the connection works. Save first, then test. (Supabase holds the database only; file storage runs on Cloudinary.)</p>
+            <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">The green “Saved” badge only means credentials were entered — it doesn't prove the connection works. Save first, then test. (The database lives on your server's PostgreSQL; file storage runs on Cloudinary.)</p>
             <Button icon={Wifi} loading={testStorage.isPending} disabled={dirty} onClick={() => testStorage.mutate()} data-testid="button-test-storage">{testStorage.isPending ? 'Testing…' : 'Test connection'}</Button>
           </div>
 
@@ -526,7 +596,7 @@ function AdminSettings() {
 
         {tab === 'notifications' && <NotificationBroadcastPanel />}
 
-        {tab !== 'notifications' && <SaveBar dirty={dirty} saving={save.isPending} saved={save.isSuccess && !dirty} onSave={() => save.mutate(values)} onDiscard={() => setForm(null)} />}
+        {tab !== 'notifications' && <SaveBar dirty={dirty} saving={save.isPending} saved={save.isSuccess && !dirty} onSave={trySave} onDiscard={() => setForm(null)} />}
       </div>
     </div>
   </div>;

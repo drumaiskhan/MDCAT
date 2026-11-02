@@ -1016,6 +1016,7 @@ export const settingsApi = {
   rotateAdminCode: () => request<{ ADMIN_SIGNUP_CODE: string }>('/admin/settings/rotate-admin-code', { method: 'POST' }),
   testStorage: () => request<{ cloudinary: { ok: boolean; error?: string }; cloudinaryBackup: { ok: boolean; error?: string } }>('/admin/settings/test-storage', { method: 'POST' }),
   // `slot` (Brevo only) tests one account on its own with no failover.
+  testAi: () => request<{ results: Array<{ label: string; provider: string; model: string; ok: boolean; ms: number; error?: string }> }>('/admin/settings/test-ai', { method: 'POST' }),
   testEmail: (to: string, slot?: number) => request<{ ok: boolean; error?: string }>('/admin/settings/test-email', { method: 'POST', body: JSON.stringify(slot ? { to, slot } : { to }) }),
 };
 
