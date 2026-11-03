@@ -1,3 +1,23 @@
+# FSc years by plan: separate FSc-I / FSc-II content, one storage module per year
+
+- **Plan-based year access** (`backend/src/lib/courseYearAccess.ts`): the FSc years a student can study come from the purchased, unexpired plan(s) they hold. An FSc-I plan unlocks FSc-I, an FSc-II plan FSc-II, and a "Full Course" plan (any course year named full / both / combined / complete / whole, or a plan that ticks both years) unlocks both. A plan with no years is open to every year. A newer purchase no longer hides an older paid one (FSc-I then FSc-II = both); admin-assigned plan changes still replace the old plan. Students with no purchased plan (trial/expired) fall back to the year picked at signup; students with none on file stay unrestricted, as before.
+- `getStudentTargeting` now carries `courseYearIds`, and `courseYearAllows` uses it, so books, exams, past papers, lectures, notes, modules and notifications all follow the plan instead of only the signup year.
+- **One internal storage module per FSc year** (`curriculumStorageId(courseYearId)`): subjects filed under a year live in a module tagged with that year, so the existing module-visibility rules keep FSc-II content from FSc-I-only students. Subjects without a year keep the shared module. Changing a subject's year re-files it and its MCQs/flashcards; a startup backfill (`syncSubjectYearStorage`) moves existing year-tagged subjects. No schema changes.
+- `GET /subjects` filters by the student's allowed years; new `GET /course-years/mine` (years + unlocked flag) and `GET /course-years/content` (real years, no bundles). Notes and lectures return the subject's `courseYearId`.
+- `POST /payments` no longer limits a student to plans for their signup year, so they can add the other year or the Full Course later.
+- **Admin:** Flashcards upload, AI draft and manual add use the shared FSc Year > Subject > Chapter > Topic picker; the flashcard bank tree is grouped by year; Lectures, Notes, Chapters, Topics and Subjects get the year step; "Full Course" is no longer offered as a place to file content.
+- **Student:** FSc-I / FSc-II tabs on Subjects (locked years show a "not in your plan" panel), a year select on Flashcards and Lectures, year tabs on Notes, a Year > Subject breadcrumb on topics, and plan cards on Payments show the years they cover. The chosen year is shared across pages.
+
+# Admin: FSc Year > Subject > Chapter > Topic, AI MCQ Maker removed from admin
+
+- Removed the admin "AI MCQ Maker: questions saved to the bank" panel, the "AI-made" stat tile and filter chip, the AI badge on questions, and the AI question generators (top "Add multiple" generator and the per-topic generate button). Deleted `AiMcqReviewPanel.tsx`.
+- Backend no longer files student AI-made questions into the Qbank (`studentQbankContribution.ts` deleted, call removed from `/ai/mcq-maker`). The student-side AI MCQ Maker page itself is unchanged; switch it off with the `AI_MCQ_MAKER_ENABLED` site setting if it should go too.
+- New `med_subjects.course_year_id` (nullable, added automatically by `ensureSchema`; also in `ensure-schema.sql` / `manual-migration.sql`). `GET/POST/PATCH /subjects` return and accept `courseYearId`; `GET /subjects?courseYearId=` filters for admins. Students only see subjects of their own FSc year plus subjects with no year. Existing subjects stay valid (no year = shown under every year).
+- Admin MCQ page: new `CurriculumPicker` (FSc year > subject > chapter > topic) replaces the old subject/topic pickers for bulk file upload, manual add and "Add multiple". The Block / Module / Program steps are no longer shown.
+- Question bank tree is now FSc year > subject > chapter > topic > questions.
+- Admin Subjects page: choose the FSc year when creating or editing a subject.
+- Admin Settings: removed the two "student-made MCQs to the Qbank" toggles.
+
 # Chapters (Subject → Chapter → Topic)
 
 - New `med_chapters` table and nullable `med_topics.chapter_id` (created automatically on API start by `ensureSchema`; also in `ensure-schema.sql` / `manual-migration.sql`). Existing topics stay valid and show as "No chapter".

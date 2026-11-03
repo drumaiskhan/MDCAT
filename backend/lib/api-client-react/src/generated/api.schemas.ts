@@ -163,6 +163,8 @@ export interface ModuleInput {
 export interface Subject {
   id: number;
   moduleId: number;
+  /** @nullable */
+  courseYearId?: number | null;
   name: string;
   topicCount: number;
   /** @nullable */

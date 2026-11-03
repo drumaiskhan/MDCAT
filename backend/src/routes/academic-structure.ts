@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, institutionsTable, programsTable, academicYearsTable, batchesTable, auditLogsTable, usersTable, courseYearsTable, membershipPlansTable } from "@workspace/db";
-import { requireAdmin, isAdminRole } from "../middlewares/auth";
+import { requireAdmin, requireAuth, isAdminRole } from "../middlewares/auth";
+import { contentCourseYears, resolveCourseYearAccess } from "../lib/courseYearAccess";
 
 const router: IRouter = Router();
 
@@ -269,6 +270,20 @@ router.get("/course-years", async (req, res): Promise<void> => {
   const isAdmin = !!req.user && isAdminRole(req.user.role);
   const rows = await db.select().from(courseYearsTable).where(isAdmin ? undefined : eq(courseYearsTable.active, true)).orderBy(asc(courseYearsTable.displayOrder), asc(courseYearsTable.id));
   res.json(rows);
+});
+
+// The real study years (FSc-I, FSc-II ...), without "Full Course"-style bundles —
+// what the Year > Subject > Chapter > Topic pickers list.
+router.get("/course-years/content", async (req, res): Promise<void> => {
+  const isAdmin = !!req.user && isAdminRole(req.user.role);
+  const rows = await contentCourseYears();
+  res.json(isAdmin ? rows : rows.filter((r) => r.active));
+});
+
+// The signed-in student's years: each real year with whether their plan(s) unlock it.
+router.get("/course-years/mine", requireAuth, async (req, res): Promise<void> => {
+  const [rows, allowed] = await Promise.all([contentCourseYears(), req.user && isAdminRole(req.user.role) ? Promise.resolve(null) : resolveCourseYearAccess(req.user!.id)]);
+  res.json({ allAccess: allowed === null, years: rows.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, unlocked: allowed === null || allowed.includes(r.id) })) });
 });
 
 router.post("/course-years", requireAdmin, async (req, res): Promise<void> => {

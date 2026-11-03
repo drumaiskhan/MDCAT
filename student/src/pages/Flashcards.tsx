@@ -36,6 +36,7 @@ import NotFound from '@/pages/not-found';
 import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { groupByChapter, useChapters } from '@/lib/chapters';
+import { inYear, useSelectedYear } from '@/lib/courseYears';
 
 // Round 3, item 10 (performance) — this was `new QueryClient()` with no
 // options, meaning every query defaulted to `staleTime: 0` and refetched
@@ -72,6 +73,9 @@ function Flashcards() {
   const modulesInBlock = blockId ? (modulesByBlock.get(Number(blockId)) ?? []) : modules;
   const [moduleId, setModuleId] = useState('');
   const subjectsQ = useListSubjects();
+  // FSc year (shared with Subjects/Lectures/Notes): the first level of Year > Subject > Chapter > Topic.
+  const { years: studyYears, current: studyYear, select: selectYear, showSwitcher: showYearSelect } = useSelectedYear();
+  const yearSubjects = (subjectsQ.data || []).filter((s) => inYear((s as { courseYearId?: number | null }).courseYearId, studyYear));
   // Unfiltered — used only to compute the "Subjects"/"Topics" stat cards
   // across everything the student can see, independent of the cascading
   // module/subject/topic filter below.
@@ -163,6 +167,17 @@ function Flashcards() {
     {/* Coarsest filter, same level as the Blocks landing page. Optional —
         a deployment with no blocks configured just shows nothing here and
         the Module select below still lists everything, same as before. */}
+    {showYearSelect && <Select
+      value={studyYear ? String(studyYear.id) : ''}
+      onValueChange={(v) => { selectYear(Number(v)); setSubjectId(''); setTopicId(''); resetDeck(); }}
+    >
+      <SelectTrigger className="h-10 w-full rounded-xl border-border bg-card px-3 text-xs" data-testid="select-flashcard-year">
+        <SelectValue placeholder="FSc year" />
+      </SelectTrigger>
+      <SelectContent>
+        {studyYears.map((y) => <SelectItem key={y.id} value={String(y.id)} disabled={!y.unlocked}>{y.name}{y.unlocked ? '' : ' (not in your plan)'}</SelectItem>)}
+      </SelectContent>
+    </Select>}
     <Select
       value={subjectId || 'all'}
       onValueChange={(v) => { const val = v === 'all' ? '' : v; setSubjectId(val); setTopicId(''); resetDeck(); }}
@@ -173,7 +188,7 @@ function Flashcards() {
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Subjects</SelectItem>
-        {(subjectsQ.data || []).map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+        {yearSubjects.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
       </SelectContent>
     </Select>
     <Select

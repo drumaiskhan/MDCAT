@@ -1,4 +1,5 @@
-import { curriculumStorageId, subjectTopicBody, resolveSubjectTopic } from '../lib/mdcatCurriculum';
+import { curriculumStorageId, moveSubjectToYearStorage, subjectTopicBody, resolveSubjectTopic } from '../lib/mdcatCurriculum';
+import { contentCourseYears, resolveCourseYearAccess } from '../lib/courseYearAccess';
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -429,9 +430,8 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [plan] = await db.select().from(membershipPlansTable).where(and(eq(membershipPlansTable.id, parsed.data.planId), eq(membershipPlansTable.active, true)));
   if (!plan) { res.status(400).json({ error: "Selected plan is not available" }); return; }
-  const [payer] = await db.select({ courseYearId: usersTable.courseYearId }).from(usersTable).where(eq(usersTable.id, req.user!.id));
-  // Students who signed up before course years existed have none on file — don't lock them out of renewing.
-  if (payer?.courseYearId != null && !planAllowsCourseYear(plan, payer.courseYearId)) { res.status(400).json({ error: "This plan isn't available for your course year" }); return; }
+  // Plans are no longer limited to the course year picked at signup: a student can buy FSc-II after FSc-I
+  // (or the Full Course) and the years they can study follow the plans they bought.
   // couponCode isn't part of the generated SubmitPaymentBody schema (that
   // schema is auto-generated from openapi.yaml — see lib/api-zod — so it's
   // read directly off the body here rather than hand-editing generated
@@ -814,7 +814,20 @@ router.get("/subjects", requireAuth, async (req, res): Promise<void> => {
     // access-control enforcement, not just a UI filter.
     if (params.data.moduleId && !visibleIds.includes(params.data.moduleId)) { res.json([]); return; }
   }
+  // FSc year filter: admins can ask for one year (?courseYearId=); a student only ever sees subjects
+  // of their own FSc year plus subjects not tied to any year.
+  const cyRaw = Number(req.query.courseYearId);
+  let courseYearFilter: ReturnType<typeof or> | undefined;
+  if (isAdmin) {
+    if (Number.isInteger(cyRaw) && cyRaw > 0) courseYearFilter = or(eq(subjectsTable.courseYearId, cyRaw), sql`${subjectsTable.courseYearId} IS NULL`);
+  } else {
+    // Allowed years come from the plan(s) the student bought (FSc-I, FSc-II or
+    // a Full Course that covers both); null = unrestricted.
+    const allowedYears = await resolveCourseYearAccess(req.user!.id);
+    if (allowedYears !== null) courseYearFilter = allowedYears.length ? or(inArray(subjectsTable.courseYearId, allowedYears), sql`${subjectsTable.courseYearId} IS NULL`) : sql`${subjectsTable.courseYearId} IS NULL`;
+  }
   const rows = await db.select().from(subjectsTable).where(and(
+    courseYearFilter,
     // Bug fix: this never excluded archived (soft-deleted) rows, so
     // clicking Delete on a subject archived it server-side but it kept
     // sitting right there in the list — looked exactly like the delete
@@ -829,30 +842,40 @@ router.get("/subjects", requireAuth, async (req, res): Promise<void> => {
       .where(and(inArray(topicsTable.subjectId, rows.map((r) => r.id)), eq(topicsTable.archived, false))).groupBy(topicsTable.subjectId);
     for (const c of counted) topicCounts.set(c.subjectId, Number(c.count));
   }
-  res.json(ListSubjectsResponse.parse(rows.map((row) => ({ id: row.id, moduleId: row.moduleId, name: row.name, topicCount: topicCounts.get(row.id) ?? 0, iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder }))));
+  res.json(ListSubjectsResponse.parse(rows.map((row) => ({ id: row.id, moduleId: row.moduleId, courseYearId: row.courseYearId ?? null, name: row.name, topicCount: topicCounts.get(row.id) ?? 0, iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder }))));
 });
 
 router.post("/subjects", requireAdmin, async (req, res): Promise<void> => {
-  req.body = {...req.body, moduleId: await curriculumStorageId()};
-  const parsed = z.object({ moduleId: z.number().int().positive(), name: z.string().min(1), iconPath: z.string().nullable().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
+  const yearInput = req.body?.courseYearId;
+  const yearId = yearInput == null || yearInput === '' ? null : Number(yearInput);
+  if (yearId !== null && !(await contentCourseYears()).some((y) => y.id === yearId)) { res.status(400).json({ error: "Pick a valid FSc year (FSc-I or FSc-II)." }); return; }
+  // One internal storage module per FSc year (see mdcatCurriculum.ts).
+  req.body = {...req.body, courseYearId: yearId, moduleId: await curriculumStorageId(yearId)};
+  const parsed = z.object({ moduleId: z.number().int().positive(), name: z.string().min(1), courseYearId: z.number().int().positive().nullable().optional(), iconPath: z.string().nullable().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Subject name is required" }); return; }
   let displayOrder = parsed.data.displayOrder;
   if (displayOrder === undefined) {
     const [{ maxOrder } = { maxOrder: null }] = await db.select({ maxOrder: sql<number | null>`max(${subjectsTable.displayOrder})` }).from(subjectsTable).where(eq(subjectsTable.moduleId, parsed.data.moduleId));
     displayOrder = (maxOrder ?? -1) + 1;
   }
-  const [row] = await db.insert(subjectsTable).values({ moduleId: parsed.data.moduleId, name: parsed.data.name, iconPath: parsed.data.iconPath ?? null, displayOrder }).returning();
+  const [row] = await db.insert(subjectsTable).values({ moduleId: parsed.data.moduleId, name: parsed.data.name, courseYearId: parsed.data.courseYearId ?? null, iconPath: parsed.data.iconPath ?? null, displayOrder }).returning();
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "SUBJECT_CREATED", entity: "subject", entityId: row.id });
-  res.status(201).json({ id: row.id, moduleId: row.moduleId, name: row.name, topicCount: 0, iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder });
+  res.status(201).json({ id: row.id, moduleId: row.moduleId, courseYearId: row.courseYearId ?? null, name: row.name, topicCount: 0, iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder });
 });
 
 router.patch("/subjects/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const parsed = z.object({ name: z.string().min(1).optional(), active: z.boolean().optional(), iconPath: z.string().nullable().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
+  const parsed = z.object({ name: z.string().min(1).optional(), active: z.boolean().optional(), courseYearId: z.number().int().positive().nullable().optional(), iconPath: z.string().nullable().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid subject" }); return; }
-  const [row] = await db.update(subjectsTable).set(parsed.data).where(eq(subjectsTable.id, id)).returning();
+  if (parsed.data.courseYearId != null && !(await contentCourseYears()).some((y) => y.id === parsed.data.courseYearId)) { res.status(400).json({ error: "Pick a valid FSc year (FSc-I or FSc-II)." }); return; }
+  let [row] = await db.update(subjectsTable).set(parsed.data).where(eq(subjectsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Subject not found" }); return; }
-  res.json({ id: row.id, moduleId: row.moduleId, name: row.name, topicCount: await getSubjectTopicCount(row.id), iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder });
+  // Changing the FSc year re-files the subject (and its MCQs / flashcards) into that year's storage module.
+  if (parsed.data.courseYearId !== undefined) {
+    await moveSubjectToYearStorage(row.id, row.courseYearId ?? null);
+    [row] = await db.select().from(subjectsTable).where(eq(subjectsTable.id, id));
+  }
+  res.json({ id: row.id, moduleId: row.moduleId, courseYearId: row.courseYearId ?? null, name: row.name, topicCount: await getSubjectTopicCount(row.id), iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: row.displayOrder });
 });
 
 router.delete("/subjects/:id", requireAdmin, async (req, res): Promise<void> => {

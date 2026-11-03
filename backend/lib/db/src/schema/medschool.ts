@@ -390,6 +390,8 @@ export const subjectsTable = pgTable("med_subjects", {
   id: serial("id").primaryKey(),
   moduleId: integer("module_id").notNull(),
   name: text("name").notNull(),
+  // FSc year this subject belongs to (id from med_course_years). Null = shown under every year.
+  courseYearId: integer("course_year_id"),
   // Optional thumbnail, resolved the same way as blocksTable/modulesTable's
   // storagePath-style columns via resolveFileUrl() in api-server/src/lib/storage.ts.
   iconPath: text("icon_path"),

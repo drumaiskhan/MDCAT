@@ -566,6 +566,7 @@ components:
       properties:
         id: { type: integer }
         moduleId: { type: integer }
+        courseYearId: { type: ["integer", "null"] }
         name: { type: string }
         topicCount: { type: integer }
         iconUrl: { type: ["string", "null"] }

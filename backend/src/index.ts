@@ -7,6 +7,7 @@ import "./lib/loadEnvironment";
 import app from "./app";
 import { seedLocalStudent } from "./lib/seedLocalStudent";
 import { ensureMdcatSchema, seedMdcat } from "./lib/mdcatSetup";
+import { syncSubjectYearStorage } from "./lib/mdcatCurriculum";
 import { logger } from "./lib/logger";
 import { seedDefaultAdmin } from "./lib/seedAdmin";
 import { normalizeLegacyRoles } from "./lib/normalizeLegacyRoles";
@@ -62,6 +63,7 @@ async function runStartupTasks(): Promise<void> {
   try {
     await ensureMdcatSchema();
     await seedMdcat();
+    await syncSubjectYearStorage().catch((error) => logger.warn({ err: error }, "FSc year storage backfill skipped"));
     await normalizeLegacyRoles();
   } catch (err) {
     logger.error({ err }, "[migrate] Failed to normalize legacy 'superadmin' roles to 'admin' - those accounts may still be blocked from the admin UI until this succeeds.");

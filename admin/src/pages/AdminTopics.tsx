@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { YearSubjectSelect } from '@/components/CurriculumPicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { ArrowDown, ArrowUp, FileText, Pencil, Trash2 } from 'lucide-react';
@@ -87,12 +88,7 @@ export default function AdminTopics() {
       <Link href="/admin/topics" className="rounded-xl border border-primary bg-primary/10 px-4 py-2 text-sm font-semibold text-primary">Topics</Link>
     </div>
 
-    <label className="block text-sm font-semibold">Subject
-      <select aria-label="Subject" className={field + ' mt-2'} value={subjectId} onChange={(e) => pickSubject(e.target.value)}>
-        <option value="">Choose subject</option>
-        {subjects.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-      </select>
-    </label>
+    <YearSubjectSelect subjects={subjects.data ?? []} value={subjectId} onChange={pickSubject} testIdPrefix="topics" />
 
     {subjectId && <>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by chapter">

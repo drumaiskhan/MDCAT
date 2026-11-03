@@ -504,8 +504,6 @@ export interface AdminMcqRow {
   path?: McqPath;
 }
 export interface McqPath { program: string | null; year: number | null; blockId: number | null; block: string | null; module: string | null; subject: string | null; topic: string | null }
-/** Source tag the student AI MCQ Maker gives the questions it files into the Qbank. */
-export const STUDENT_AI_SOURCE = 'student_ai';
 // A 20,000-row request returned 503 on the host (the response is too big / slow for the
 // serverless gateway), so the bank is pulled in moderate pages, a few pages at a time in
 // parallel. If a page still fails, the page size is halved automatically and it retries.
@@ -561,8 +559,6 @@ export const mcqAdminApi = {
     request<{ ok: true; deleted: number }>('/admin/mcqs/bulk', { method: 'DELETE', body: JSON.stringify(body) }),
   bulkCreate: (mcqs: Array<Partial<AdminMcqRow> & { question: string; options: string[] }>) =>
     request<{ ok: true; created: number; mcqs: AdminMcqRow[] }>('/admin/mcqs/bulk', { method: 'POST', body: JSON.stringify({ mcqs }) }),
-  generateAi: (topicId: number, count: number, difficulty?: 'easy' | 'moderate' | 'hard') =>
-    request<{ drafts: Array<{ question: string; options: string[]; correctAnswer: string; explanation: string; optionExplanations?: (string | null)[]; difficulty?: string }>; topicLabel: string }>('/admin/mcqs/generate', { method: 'POST', body: JSON.stringify({ topicId, count, difficulty }) }),
   // AI-reclassifies difficulty for existing questions (easy/moderate/hard).
   // Each call is still capped server-side (see CLASSIFY_BATCH_CAP) so a
   // single request can't run long enough to hit a hosting gateway timeout
@@ -968,14 +964,14 @@ export const courseYearsApi = {
 // build out its curriculum)
 // ---------------------------------------------------------------------------
 
-export interface AdminSubject { id: number; moduleId: number; name: string; active?: boolean; topicCount: number; iconUrl?: string | null; displayOrder?: number }
+export interface AdminSubject { id: number; moduleId: number; courseYearId?: number | null; name: string; active?: boolean; topicCount: number; iconUrl?: string | null; displayOrder?: number }
 export interface AdminChapter { id: number; subjectId: number; name: string; active?: boolean; topicCount: number; questionCount: number; displayOrder?: number }
 export interface AdminTopic { id: number; subjectId: number; chapterId?: number | null; name: string; active?: boolean; questionCount: number; completed?: boolean; displayOrder?: number }
 
 export const subjectAdminApi = {
   list: (moduleId?: number) => request<AdminSubject[]>(`/subjects${moduleId ? `?moduleId=${moduleId}` : ''}`),
-  create: (body: { moduleId: number; name: string; active?: boolean; iconPath?: string | null; displayOrder?: number }) => request<AdminSubject>('/subjects', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: Partial<{ name: string; active: boolean; iconPath: string | null; displayOrder: number }>) => request<AdminSubject>(`/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  create: (body: { moduleId: number; name: string; courseYearId?: number | null; active?: boolean; iconPath?: string | null; displayOrder?: number }) => request<AdminSubject>('/subjects', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; courseYearId: number | null; active: boolean; iconPath: string | null; displayOrder: number }>) => request<AdminSubject>(`/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/subjects/${id}`, { method: 'DELETE' }),
 };
 

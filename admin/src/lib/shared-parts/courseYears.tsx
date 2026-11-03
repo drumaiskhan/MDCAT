@@ -8,11 +8,21 @@ import { cn } from './ui';
 // Shares its query key with that page so both stay in sync.
 export const COURSE_YEARS_QUERY_KEY = ['course-years', 'admin'] as const;
 
+/** "Full Course" / "Both years" style entries bundle the real years; they are plan
+ * options, never a place to file content. Mirrors the API's isBundleCourseYearName. */
+export const isBundleYearName = (name: string) => /\b(full|both|combined|complete|whole)\b/i.test(name);
+
 export function useCourseYears() {
   const q = useQuery({ queryKey: COURSE_YEARS_QUERY_KEY, queryFn: courseYearsApi.list });
   const years: CourseYear[] = q.data ?? [];
   const nameOf = (id: number) => years.find((c) => c.id === id)?.name ?? `#${id}`;
   return { years, nameOf, isLoading: q.isLoading };
+}
+
+/** The real study years (FSc-I, FSc-II ...) that content can be filed under. */
+export function useStudyYears() {
+  const { years, ...rest } = useCourseYears();
+  return { years: years.filter((y) => !isBundleYearName(y.name)), ...rest };
 }
 
 export function CourseYearPicker({ value, onChange, testIdPrefix = 'course-year', className }: { value: number[]; onChange: (ids: number[]) => void; testIdPrefix?: string; className?: string }) {

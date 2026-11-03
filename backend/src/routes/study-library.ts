@@ -74,7 +74,7 @@ async function noteAccess(req:Request,res:Response){
 }
 const membership=requireMembershipFor('resources');
 router.get('/notes',requireAuth,membership,async(req,res)=>{
- const rows=await q('SELECT n.id,n.title,n.subject_id AS "subjectId",n.updated_at AS "updatedAt",s.name AS subject,s.module_id AS "moduleId" FROM mdcat_notes n JOIN med_subjects s ON s.id=n.subject_id WHERE n.published=true AND s.active=true AND s.archived=false ORDER BY s.display_order,n.title');
+ const rows=await q('SELECT n.id,n.title,n.subject_id AS "subjectId",n.updated_at AS "updatedAt",s.name AS subject,s.course_year_id AS "courseYearId",s.module_id AS "moduleId" FROM mdcat_notes n JOIN med_subjects s ON s.id=n.subject_id WHERE n.published=true AND s.active=true AND s.archived=false ORDER BY s.display_order,n.title');
  const modules=await getVisibleModuleIds(await getStudentTargeting(req.user!.id));
  res.json(isAdminRole(req.user!.role)?rows:rows.filter(n=>modules.includes(n.moduleId)));
 });

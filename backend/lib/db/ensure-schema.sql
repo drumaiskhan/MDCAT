@@ -735,6 +735,7 @@ ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS block_id INTEGER;
 ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS icon_path TEXT;
 -- Optional subject thumbnail, same pattern as blocks/modules above.
 ALTER TABLE med_subjects ADD COLUMN IF NOT EXISTS icon_path TEXT;
+ALTER TABLE med_subjects ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
 ALTER TABLE med_topics ADD COLUMN IF NOT EXISTS chapter_id INTEGER;
 CREATE INDEX IF NOT EXISTS med_topics_chapter_idx ON med_topics (chapter_id);
 CREATE INDEX IF NOT EXISTS med_chapters_subject_idx ON med_chapters (subject_id);

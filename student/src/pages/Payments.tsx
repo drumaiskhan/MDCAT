@@ -32,7 +32,7 @@ import { toast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import { authApi, couponsApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
+import { authApi, couponsApi, courseYearsApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
 
 // Round 3, item 10 (performance) — this was `new QueryClient()` with no
 // options, meaning every query defaulted to `staleTime: 0` and refetched
@@ -60,11 +60,11 @@ function Payments() {
   const payQ = useListPayments();
   const paymentDetails = useQuery({ queryKey: ['payment-details'], queryFn: publicApi.paymentDetails });
   const dashboard = useGetStudentDashboard();
-  // Show only plans sold for this student's course year (plus plans open to all).
-  // Students with no course year on file (older accounts) still see every plan.
-  const meQ = useGetCurrentUser();
-  const myCourseYearId = (meQ.data as { courseYearId?: number | null } | undefined)?.courseYearId ?? null;
-  const plans = (plansQ.data ?? []).filter((p) => { const ids = p.courseYearIds ?? []; return !ids.length || myCourseYearId == null || ids.includes(myCourseYearId); });
+  // Every active plan is offered: the FSc years a student can study follow the plans they
+  // bought (FSc-I, FSc-II or the Full Course), so a student can add the other year later.
+  const courseYearsQ = useQuery({ queryKey: ['course-years'], queryFn: courseYearsApi.list });
+  const yearNames = new Map((courseYearsQ.data ?? []).map((c) => [c.id, c.name]));
+  const plans = plansQ.data ?? [];
   const payments = payQ.data ?? [];
   const isActive = dashboard.data?.membershipStatus === 'ACTIVE';
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
@@ -134,6 +134,7 @@ function Payments() {
       {p.discountLabel && p.id !== bestValueId && <span className="absolute right-3 top-3 rounded-full bg-[#fff0cb] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-[#94651c]">{p.discountLabel}</span>}
       <div className="flex items-center gap-2"><div className={cn('plan-3d__icon grid size-8 place-items-center rounded-lg', selectedPlan === p.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><CreditCard size={15} /></div>{selectedPlan === p.id && <CheckCircle2 size={16} className="plan-3d__check text-primary" />}</div>
       <div className="mt-3 text-sm font-extrabold">{p.name}</div>
+      {(p.courseYearIds ?? []).length > 0 && <div className="mt-1 flex flex-wrap gap-1" data-testid={`badges-plan-years-${p.id}`}>{(p.courseYearIds ?? []).map((id) => <span key={id} className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">{yearNames.get(id) ?? `#${id}`}</span>)}</div>}
       {p.description && <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{p.description}</p>}
       <div className="mt-2 flex items-center gap-2">{p.originalPrice != null && p.originalPrice > p.price && <span className="text-xs text-muted-foreground line-through">{money(p.originalPrice, p.currency)}</span>}<span className="font-display text-2xl">{money(p.price, p.currency)}</span></div>
       <div className="mt-1 text-[11px] text-muted-foreground">{p.duration} {p.durationUnit} access</div>

@@ -40,9 +40,9 @@ import NotFound from '@/pages/not-found';
 import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, analyticsApi, mcqImportApi, flashcardImportApi, mcqBackupApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, subjectAdminApi, topicAdminApi, flashcardsAdminApi, flashcardsAiApi, booksAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blockAdminApi, examsAdminApi, examsApi, explanationsApi, auditApi, adminSearchApi, type AdminSearchResponse, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type FlashcardCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type TeamCategory, type AdminModule, type AdminBlock, type AdminSubject, type AdminTopic, type AdminFlashcard, type GeneratedFlashcard, type AdminMcqRow, type AdminBook, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type BankAccount, type PaymentMethodConfig, aiVisualizerAdminApi, type AiVisualizerLogEntry, type AuditLogEntry, type BackupScope } from '@/lib/api';
 
 import { Badge, BrandSpinner, ConfirmDialog, DifficultyPicker, EmptyState, InlineLoading, SkeletonPage, SuggestedPathHint, cn } from './ui';
-import { STUDENT_AI_SOURCE, type McqPath } from '@/lib/api';
+import { type McqPath } from '@/lib/api';
 import { DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, studyYearToNumber } from './groups';
-import { CourseYearPicker } from './courseYears';
+import { CourseYearPicker, useCourseYears, useStudyYears } from './courseYears';
 
 
 // Standalone "Subjects" settings page — same capability as
@@ -160,7 +160,7 @@ export function McqTreeRow({ mcq, selectedIds, onToggleSelect, showPath }: { mcq
     <div className="flex items-start justify-between gap-3">
       <div className="flex flex-1 items-start gap-2">
         {onToggleSelect && <input type="checkbox" className="mt-1" checked={selectedIds?.has(mcq.id) ?? false} onChange={() => onToggleSelect(mcq.id)} data-testid={`checkbox-select-tree-mcq-${mcq.id}`} />}
-        <div className="flex-1"><div className="flex flex-wrap items-center gap-2"><Badge tone={mcq.status === 'published' ? 'green' : 'amber'}>{mcq.status}</Badge><Badge tone={mcq.explanationStatus === 'APPROVED' ? 'green' : mcq.explanationStatus === 'PENDING' ? 'neutral' : 'blue'}>{mcq.explanationStatus.replace('_', ' ')}</Badge>{mcq.source === STUDENT_AI_SOURCE && <Badge tone="blue">AI MCQ Maker</Badge>}</div>{showPath && <McqPathCrumb path={mcq.path} className="mt-1.5" />}<p className="mt-2 text-xs font-bold leading-5">{mcq.question}</p></div>
+        <div className="flex-1"><div className="flex flex-wrap items-center gap-2"><Badge tone={mcq.status === 'published' ? 'green' : 'amber'}>{mcq.status}</Badge><Badge tone={mcq.explanationStatus === 'APPROVED' ? 'green' : mcq.explanationStatus === 'PENDING' ? 'neutral' : 'blue'}>{mcq.explanationStatus.replace('_', ' ')}</Badge></div>{showPath && <McqPathCrumb path={mcq.path} className="mt-1.5" />}<p className="mt-2 text-xs font-bold leading-5">{mcq.question}</p></div>
       </div>
       <div className="flex shrink-0 items-center gap-1"><button onClick={() => setEditing((v) => !v)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted" data-testid={`button-edit-mcq-${mcq.id}`}><Pencil size={14} /></button><button onClick={() => setDeleting(true)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" data-testid={`button-delete-tree-mcq-${mcq.id}`}><Trash2 size={14} /></button></div>
     </div>
@@ -329,39 +329,11 @@ export function AnalysisToggle({ rows, label, filters }: { rows: AdminMcqRow[]; 
 // dropdowns filled in first), this already knows its scope from the tree,
 // so it's a one-click generate-review-save loop without leaving the row.
 
-export function TopicAiGenerate({ moduleId, subjectId, topicId, topicName }: { moduleId: number; subjectId: number; topicId: number; topicName: string }) {
-  const [open, setOpen] = useState(false);
-  const [count, setCount] = useState(5);
-  const [difficulty, setDifficulty] = useState<'mixed' | 'easy' | 'moderate' | 'hard'>('mixed');
-  const [drafts, setDrafts] = useState<GeneratedFlashcard[] extends never ? never : Array<{ question: string; options: string[]; correctAnswer: string; explanation: string; optionExplanations?: (string | null)[]; difficulty?: string }> | null>(null);
-  const generate = useMutation({
-    mutationFn: () => mcqAdminApi.generateAi(topicId, count, difficulty === 'mixed' ? undefined : difficulty),
-    onSuccess: (res) => setDrafts(res.drafts),
-    onError: (err: unknown) => toast({ title: 'Could not generate questions', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
-  });
-  const save = useMutation({
-    mutationFn: () => mcqAdminApi.bulkCreate((drafts ?? []).map((d) => ({ question: d.question, options: d.options, correctAnswer: d.correctAnswer, explanation: d.explanation, optionExplanations: d.optionExplanations ?? undefined, difficulty: d.difficulty ?? 'moderate', moduleId, subjectId, topicId }))),
-    onSuccess: (res) => { queryClient.invalidateQueries({ queryKey: ['admin-mcqs-tree'] }); queryClient.invalidateQueries({ queryKey: getListMcqsQueryKey() }); toast({ title: `Added ${res.created} questions to ${topicName}` }); setDrafts(null); setOpen(false); },
-    onError: (err: unknown) => toast({ title: 'Could not save questions', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
-  });
-  return <>
-    <button type="button" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} className={cn('rounded-lg p-1', open ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted')} data-testid={`button-toggle-ai-generate-topic-${topicId}`} aria-label="Generate AI questions for this topic"><Sparkles size={13} /></button>
-    {open && <div className="w-full basis-full border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
-      <div className="flex flex-wrap items-center gap-2"><select value={count} onChange={(e) => setCount(Number(e.target.value))} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-ai-count-topic-${topicId}`}>{[3, 5, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}</select><select value={difficulty} onChange={(e) => setDifficulty(e.target.value as typeof difficulty)} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-ai-difficulty-topic-${topicId}`}><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="moderate">Moderate</option><option value="hard">Hard</option></select><button type="button" disabled={generate.isPending} onClick={() => generate.mutate()} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-generate-topic-${topicId}`}>{generate.isPending ? 'Generating…' : <><Sparkles size={12} /> Generate</>}</button></div>
-      {drafts && <div className="mt-3 space-y-2">
-        {drafts.map((d, i) => <div key={i} className="rounded-lg bg-muted px-2.5 py-1.5 text-xs"><span className="mr-1.5 rounded bg-card px-1.5 py-0.5 text-[10px] font-bold uppercase">{d.difficulty ?? 'moderate'}</span>{d.question}</div>)}
-        {!drafts.length && <p className="text-[11px] text-muted-foreground">AI returned nothing usable — try again.</p>}
-        {!!drafts.length && <button type="button" disabled={save.isPending} onClick={() => save.mutate()} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-save-ai-drafts-topic-${topicId}`}>{save.isPending ? 'Saving…' : `Save all ${drafts.length} to ${topicName}`}</button>}
-      </div>}
-    </div>}
-  </>;
-}
-
 export function McqTreeTopic({ moduleId, subjectId, topicId, name, mcqsByTopic, selectedIds, onToggleSelect }: { moduleId: number; subjectId: number; topicId: number; name: string; mcqsByTopic: Map<number, AdminMcqRow[]>; selectedIds: Set<number>; onToggleSelect: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const rows = mcqsByTopic.get(topicId) ?? [];
   return <div className="rounded-lg border border-border bg-background">
-    <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-2"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-tree-topic-${topicId}`}><ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />{name}</button><span className="text-[10px] font-normal text-muted-foreground">{rows.length} question{rows.length === 1 ? '' : 's'}</span><AnalysisToggle rows={rows} label={name} filters={{ topicId }} /><TopicAiGenerate moduleId={moduleId} subjectId={subjectId} topicId={topicId} topicName={name} /><BulkDeleteInScope label={name} count={rows.length} filters={{ topicId }} /></div>
+    <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-2"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-tree-topic-${topicId}`}><ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />{name}</button><span className="text-[10px] font-normal text-muted-foreground">{rows.length} question{rows.length === 1 ? '' : 's'}</span><AnalysisToggle rows={rows} label={name} filters={{ topicId }} /><BulkDeleteInScope label={name} count={rows.length} filters={{ topicId }} /></div>
     {open && <div className="space-y-2 border-t border-border p-3">{rows.length ? rows.map((m) => <McqTreeRow key={m.id} mcq={m} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />) : <p className="text-[11px] text-muted-foreground">No questions in this topic yet.</p>}</div>}
   </div>;
 }
@@ -563,17 +535,42 @@ export function BackupScopePicker({blocks,allModules,onChange}:{blocks:AdminBloc
  return <div className="flex gap-2"><select aria-label="Backup subject" value={subject} onChange={e=>{setSubject(e.target.value);setTopic('');}} className="rounded-lg border bg-background p-2 text-xs"><option value="">All subjects</option>{subjects.data?.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><select aria-label="Backup topic" disabled={!subject} value={topic} onChange={e=>setTopic(e.target.value)} className="rounded-lg border bg-background p-2 text-xs"><option value="">All topics</option>{topics.data?.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>;
 }
 
-export function McqBankTree({ modules, blocks, search, statusFilter, difficultyFilter, publishFilter, sourceFilter, selectedIds, onToggleSelect }: { modules: AdminModule[]; blocks: AdminBlock[]; search?: string; statusFilter?: ExplanationStatus | null; difficultyFilter?: string | null; publishFilter?: 'published' | 'draft' | null; sourceFilter?: string | null; selectedIds: Set<number>; onToggleSelect: (id: number) => void }) {
-  const treeQ=useQuery({queryKey:['admin-mcqs-tree'],queryFn:mcqAdminApi.treeQueryFn});
-  const subjects=useQuery({queryKey:['admin-flat-subjects'],queryFn:()=>subjectAdminApi.list()});
-  const rows=(treeQ.data||[]).filter(r=>r.examId===null&&r.pastPaperId===null&&(!search||r.question.toLowerCase().includes(search.toLowerCase()))&&(!statusFilter||r.explanationStatus===statusFilter)&&(!difficultyFilter||r.difficulty===difficultyFilter)&&(!publishFilter||r.status.toLowerCase()===publishFilter)&&(!sourceFilter||r.source===sourceFilter));
-  const mcqsByTopic=new Map<number,AdminMcqRow[]>();
-  for(const row of rows)if(row.topicId!=null)mcqsByTopic.set(row.topicId,[...(mcqsByTopic.get(row.topicId)||[]),row]);
-  if(treeQ.isLoading||subjects.isLoading)return <SkeletonPage/>;
-  if(treeQ.error||subjects.error)return <p role="alert">Could not load the question bank. Please refresh.</p>;
-  return <div className="space-y-4">{subjects.data?.map(subject=><McqTreeSubject key={subject.id} subjectId={subject.id} moduleId={subject.moduleId} name={subject.name} mcqsByTopic={mcqsByTopic} selectedIds={selectedIds} onToggleSelect={onToggleSelect}/>)}
-  {!subjects.data?.length&&<EmptyState icon={BookOpen} title="Add your first subject" body="Open Subjects in admin, then add topics and import questions."/>}
-  {rows.filter(r=>r.topicId==null).map(mcq=><McqTreeRow key={mcq.id} mcq={mcq} selectedIds={selectedIds} onToggleSelect={onToggleSelect}/>)}</div>;
+// Question bank tree: FSc Year > Subject > Chapter > Topic > questions.
+// (Block / Module are no longer shown - subjects hang directly off an FSc year.)
+export function McqTreeCourseYear({ name, subjects, mcqsByTopic, selectedIds, onToggleSelect, defaultOpen }: { name: string; subjects: AdminSubject[]; mcqsByTopic: Map<number, AdminMcqRow[]>; selectedIds: Set<number>; onToggleSelect: (id: number) => void; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return <div className="rounded-2xl border border-border bg-card">
+    <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-5 py-3.5 text-left" data-testid={`button-tree-year-${name}`}>
+      <ChevronRight size={16} className={cn('shrink-0 text-primary transition-transform', open && 'rotate-90')} />
+      <GraduationCap size={15} className="shrink-0 text-primary" />
+      <h3 className="flex-1 text-sm font-extrabold">{name}</h3>
+      <span className="text-[11px] text-muted-foreground">{subjects.length} subject{subjects.length === 1 ? '' : 's'}</span>
+    </button>
+    {open && <div className="space-y-2 border-t border-border p-4">{subjects.length ? subjects.map((subject) => <McqTreeSubject key={subject.id} subjectId={subject.id} moduleId={subject.moduleId} name={subject.name} mcqsByTopic={mcqsByTopic} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />) : <p className="text-xs text-muted-foreground">No subjects in this year yet.</p>}</div>}
+  </div>;
+}
+
+export function McqBankTree({ search, statusFilter, difficultyFilter, publishFilter, selectedIds, onToggleSelect }: { modules?: AdminModule[]; blocks?: AdminBlock[]; search?: string; statusFilter?: ExplanationStatus | null; difficultyFilter?: string | null; publishFilter?: 'published' | 'draft' | null; selectedIds: Set<number>; onToggleSelect: (id: number) => void }) {
+  const treeQ = useQuery({ queryKey: ['admin-mcqs-tree'], queryFn: mcqAdminApi.treeQueryFn });
+  const subjects = useQuery({ queryKey: ['admin-flat-subjects'], queryFn: () => subjectAdminApi.list() });
+  const { years } = useStudyYears();
+  const rows = (treeQ.data || []).filter((r) => r.examId === null && r.pastPaperId === null && (!search || r.question.toLowerCase().includes(search.toLowerCase())) && (!statusFilter || r.explanationStatus === statusFilter) && (!difficultyFilter || r.difficulty === difficultyFilter) && (!publishFilter || r.status.toLowerCase() === publishFilter));
+  const mcqsByTopic = new Map<number, AdminMcqRow[]>();
+  for (const row of rows) if (row.topicId != null) mcqsByTopic.set(row.topicId, [...(mcqsByTopic.get(row.topicId) || []), row]);
+  if (treeQ.isLoading || subjects.isLoading) return <SkeletonPage />;
+  if (treeQ.error || subjects.error) return <p role="alert">Could not load the question bank. Please refresh.</p>;
+  const all = subjects.data || [];
+  const yearIds = new Set(years.map((y) => y.id));
+  const sortedYears = [...years].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.id - b.id);
+  const groups = sortedYears.map((y) => ({ key: String(y.id), name: y.name, subjects: all.filter((s) => s.courseYearId === y.id) }));
+  // Subjects with no FSc year (or whose year was removed) sit in their own group so nothing is hidden.
+  const noYear = all.filter((s) => s.courseYearId == null || !yearIds.has(s.courseYearId));
+  if (noYear.length || !groups.length) groups.push({ key: 'none', name: groups.length ? 'No FSc year' : 'All subjects', subjects: noYear });
+  return <div className="space-y-4">
+    {groups.map((g, i) => <McqTreeCourseYear key={g.key} name={g.name} subjects={g.subjects} mcqsByTopic={mcqsByTopic} selectedIds={selectedIds} onToggleSelect={onToggleSelect} defaultOpen={groups.length === 1 || i === 0} />)}
+    {!all.length && <EmptyState icon={BookOpen} title="Add your first subject" body="Open Subjects in admin, pick its FSc year, then add chapters, topics and import questions." />}
+    {rows.filter((r) => r.topicId == null).map((mcq) => <McqTreeRow key={mcq.id} mcq={mcq} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />)}
+  </div>;
 }
 
 export function McqTreeYearGroup({ programLabel, yearLabel, groups, showBlockLabel, rows, countByModule, mcqsByTopic, selectedIds, onToggleSelect }: {
@@ -871,14 +868,36 @@ export function FlashcardTreeYearGroup({ programLabel, yearLabel, groups, showBl
 // flashcards get the same "not all crammed onto one screen" browsing and the
 // same per-scope permanent delete as the MCQ bank.
 
+// One FSc year in the flashcard tree (FSc year > subject > chapter > topic > cards).
+export function FlashcardTreeCourseYear({ name, subjects, cardsByTopic, defaultOpen }: { name: string; subjects: AdminSubject[]; cardsByTopic: Map<number, AdminFlashcard[]>; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return <div className="rounded-2xl border border-border bg-card">
+    <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-5 py-3.5 text-left" data-testid={`button-flashcard-tree-course-year-${name}`}>
+      <ChevronRight size={16} className={cn('shrink-0 text-primary transition-transform', open && 'rotate-90')} />
+      <GraduationCap size={15} className="shrink-0 text-primary" />
+      <h3 className="flex-1 text-sm font-extrabold">{name}</h3>
+      <span className="text-[11px] text-muted-foreground">{subjects.length} subject{subjects.length === 1 ? '' : 's'}</span>
+    </button>
+    {open && <div className="space-y-2 border-t border-border p-4">{subjects.length ? subjects.map((s) => <FlashcardTreeSubject key={s.id} subjectId={s.id} name={s.name} cardsByTopic={cardsByTopic} />) : <p className="text-xs text-muted-foreground">No subjects in this year yet.</p>}</div>}
+  </div>;
+}
+
 export function FlashcardBankTree({ modules, blocks }: { modules: AdminModule[]; blocks: AdminBlock[] }) {
  const treeQ=useQuery({queryKey:['admin-flashcards-tree'],queryFn:()=>flashcardsAdminApi.list()});
  const subjects=useQuery({queryKey:['admin-flat-subjects'],queryFn:()=>subjectAdminApi.list()});
+ const { years } = useStudyYears();
  const cardsByTopic=new Map<number,AdminFlashcard[]>();
  for(const row of treeQ.data||[])if(row.topicId!=null)cardsByTopic.set(row.topicId,[...(cardsByTopic.get(row.topicId)||[]),row]);
  if(treeQ.isLoading||subjects.isLoading)return <SkeletonPage/>;
  if(treeQ.error||subjects.error)return <p role="alert">Could not load flashcards. Please refresh.</p>;
- return <div className="space-y-4">{subjects.data?.map(s=><FlashcardTreeSubject key={s.id} subjectId={s.id} name={s.name} cardsByTopic={cardsByTopic}/>)}{!subjects.data?.length&&<EmptyState icon={BookOpen} title="No subjects yet" body="Add a subject and topic first."/>}{treeQ.data?.filter(c=>c.topicId==null).map(c=><FlashcardTreeRow key={c.id} card={c}/>)}</div>;
+ const all=subjects.data||[];
+ const yearIds=new Set(years.map(y=>y.id));
+ const sortedYears=[...years].sort((a,b)=>(a.displayOrder??0)-(b.displayOrder??0)||a.id-b.id);
+ const groups=sortedYears.map(y=>({key:String(y.id),name:y.name,subjects:all.filter(s=>s.courseYearId===y.id)}));
+ // Subjects with no FSc year (or whose year was removed) sit in their own group so nothing is hidden.
+ const noYear=all.filter(s=>s.courseYearId==null||!yearIds.has(s.courseYearId));
+ if(noYear.length||!groups.length)groups.push({key:'none',name:groups.length?'No FSc year':'All subjects',subjects:noYear});
+ return <div className="space-y-4">{groups.map((g,i)=><FlashcardTreeCourseYear key={g.key} name={g.name} subjects={g.subjects} cardsByTopic={cardsByTopic} defaultOpen={groups.length===1||i===0}/>)}{!all.length&&<EmptyState icon={BookOpen} title="No subjects yet" body="Add a subject under an FSc year, then its chapters and topics."/>}{treeQ.data?.filter(c=>c.topicId==null).map(c=><FlashcardTreeRow key={c.id} card={c}/>)}</div>;
 }
 
 // Full edit — every field the create form sets, pre-filled, so admins

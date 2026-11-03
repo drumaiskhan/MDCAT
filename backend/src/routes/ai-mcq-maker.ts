@@ -4,7 +4,6 @@ import { requireAuth, requireMembershipFor } from "../middlewares/auth";
 import { checkRateLimit } from "../lib/rateLimit";
 import { getAllSettings } from "../lib/settings";
 import { generateStudentMcqs, AiNotConfiguredError } from "../lib/aiExplain";
-import { contributeStudentMcqsToQbank } from "../lib/studentQbankContribution";
 import { db, practiceAttemptsTable } from "@workspace/db";
 import { bumpStreak } from "./analytics";
 
@@ -38,9 +37,6 @@ router.post("/ai/mcq-maker", requireAuth, requireMembershipFor("ai_mcq_maker"), 
     const generated = await generateStudentMcqs(parsed.data);
     if (!generated.length) { res.status(502).json({ error: "The AI didn't return usable questions. Try again or rephrase your topic." }); return; }
     res.json({ questions: generated });
-    // Silent, non-blocking: AI files these into the right year/block/module/subject/topic of the Qbank
-    // (as drafts for admin review unless AI_MCQ_MAKER_AUTO_PUBLISH is on). Never throws, never delays the student.
-    void contributeStudentMcqsToQbank({ userId: req.user!.id, prompt: parsed.data.prompt, questions: generated });
   } catch (err) {
     if (err instanceof AiNotConfiguredError) { res.status(503).json({ error: err.message }); return; }
     res.status(502).json({ error: "Couldn't generate questions right now. Try again shortly." });
@@ -50,8 +46,7 @@ router.post("/ai/mcq-maker", requireAuth, requireMembershipFor("ai_mcq_maker"), 
 // Records a finished set as a normal practice attempt (mode "ai") so it counts toward the
 // student's sessions, accuracy, time spent, streak and leaderboard. Only the totals are saved
 // here (no per-MCQ answer rows, no module/subject/topic — it stays out of "continue learning"
-// and per-topic progress). The questions themselves are filed into the Qbank separately, in the
-// background, by contributeStudentMcqsToQbank (see POST /ai/mcq-maker above).
+// and per-topic progress). Generated questions are never saved into the admin Qbank.
 const SessionBody = z.object({
   answered: z.number().int().min(1).max(MAX_TOTAL),
   correct: z.number().int().min(0).max(MAX_TOTAL),

@@ -21,7 +21,7 @@ import { SubjectIcon, resolveSubjectIcon } from '@/lib/subject-icons';
 const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ');
 const vars = (v: Record<string, string | number>) => v as unknown as CSSProperties;
 
-export interface SubjectRow { id: number; name: string; topicCount: number; iconUrl?: string | null }
+export interface SubjectRow { id: number; name: string; topicCount: number; iconUrl?: string | null; courseYearId?: number | null }
 export interface TopicItem { id: number; name: string; questionCount: number; completed: boolean; chapterId?: number | null }
 
 // ---------------------------------------------------------------------------

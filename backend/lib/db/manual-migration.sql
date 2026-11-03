@@ -168,3 +168,5 @@ ALTER TABLE med_past_papers ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] N
 ALTER TABLE med_exams ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
 
 COMMIT;
+
+ALTER TABLE med_subjects ADD COLUMN IF NOT EXISTS course_year_id INTEGER;

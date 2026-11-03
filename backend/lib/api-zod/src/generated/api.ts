@@ -438,6 +438,7 @@ export const ListSubjectsResponseItem = zod.object({
   "id": zod.int(),
   "moduleId": zod.int(),
   "name": zod.string(),
+  "courseYearId": zod.int().nullable().optional(),
   "topicCount": zod.int(),
   "iconUrl": zod.string().nullable().optional(),
   "displayOrder": zod.int().optional()

@@ -1,5 +1,5 @@
 // Auto-extracted route page — code-split via React.lazy() in App.tsx.
-import { TopicOptions } from '@/components/TopicOptions';
+import { CurriculumSelects, useCurriculumPicker } from '@/components/CurriculumPicker';
 import { type ReactNode, type ComponentProps, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from '@tanstack/react-query';
 import { Link, Route, Switch, useLocation, useSearch, useParams, Router as WouterRouter } from 'wouter';
@@ -34,8 +34,6 @@ import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiReq
 // background refetches of data nothing has touched.
 import { DifficultyPicker, ExplanationCoverage, SectionHeader, cn, ConfirmDialog, McqBankTree, groupBlocksForPicker, BackupScopePicker, ProgramYearFilter, filterBlocksByProgramYear, studyYearToNumber, SuggestedPathHint } from '@/lib/shared';
 import { McqBackupPanel } from '@/components/McqBackupPanel';
-import { AiMcqReviewPanel } from '@/components/AiMcqReviewPanel';
-import { STUDENT_AI_SOURCE } from '@/lib/api';
 import { queryClient } from '@/lib/query-client';
 import { EyeOff as IconEyeOff, FolderX as IconFolderX, ListChecks as IconListChecks } from 'lucide-react';
 import { Chip, StatTiles } from '@/lib/admin-ui';
@@ -62,16 +60,13 @@ function AdminMcqs() {
   // selects what is on screen.
   const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
   const [publishFilter, setPublishFilter] = useState<'published' | 'draft' | null>(null);
-  // "AI-made" chip: only questions the student AI MCQ Maker filed into the bank (source student_ai).
-  const [aiOnly, setAiOnly] = useState(false);
   const isPublished = (m: { status: string }) => m.status.toLowerCase() === 'published';
   const mcqs = allMcqs.filter((m) =>
     m.examId === null && m.pastPaperId === null &&
     (!search.trim() || m.question.toLowerCase().includes(search.trim().toLowerCase())) &&
     (!statusFilter || m.explanationStatus === statusFilter) &&
     (!difficultyFilter || m.difficulty === difficultyFilter) &&
-    (!publishFilter || (publishFilter === 'published') === isPublished(m)) &&
-    (!aiOnly || m.source === STUDENT_AI_SOURCE));
+    (!publishFilter || (publishFilter === 'published') === isPublished(m)));
   // Bank overview (exam-/past-paper-owned rows are not part of the bank tree).
   const bankRows = allMcqs.filter((m) => m.examId === null && m.pastPaperId === null);
   const bankStats = {
@@ -80,9 +75,8 @@ function AdminMcqs() {
     drafts: bankRows.filter((m) => !isPublished(m)).length,
     unassigned: bankRows.filter((m) => m.topicId === null).length,
     needExplanation: bankRows.filter((m) => m.explanationStatus === 'PENDING').length,
-    aiMade: bankRows.filter((m) => m.source === STUDENT_AI_SOURCE).length,
   };
-  const anyFilter = !!(search.trim() || statusFilter || difficultyFilter || publishFilter || aiOnly);
+  const anyFilter = !!(search.trim() || statusFilter || difficultyFilter || publishFilter);
   const [manualOpen, setManualOpen] = useState(false);
   // Toggle for the per-option explanation fields on the single-question
   // manual add form below — off by default so the common case (just an
@@ -122,44 +116,6 @@ function AdminMcqs() {
   });
   const bulkAddRowsInit = () => [{ question: '', a: '', b: '', c: '', d: '', e: '', correct: 'a', explanation: '', ea: '', eb: '', ec: '', ed: '', ee: '', difficulty: 'moderate', showOptionExplanations: false }];
   const [bulkRows, setBulkRows] = useState(bulkAddRowsInit);
-  const [aiCount, setAiCount] = useState(5);
-  const [aiDifficulty, setAiDifficulty] = useState<'mixed' | 'easy' | 'moderate' | 'hard'>('mixed');
-  const draftsFromAi = (drafts: Array<{ question: string; options: string[]; correctAnswer: string; explanation: string; optionExplanations?: (string | null)[]; difficulty?: string }>) => drafts.map((d) => ({
-    question: d.question,
-    a: d.options[0] ?? '', b: d.options[1] ?? '', c: d.options[2] ?? '', d: d.options[3] ?? '', e: d.options[4] ?? '',
-    correct: (['a', 'b', 'c', 'd', 'e'][d.options.findIndex((o) => o === d.correctAnswer)] ?? 'a'),
-    explanation: d.explanation,
-    ea: d.optionExplanations?.[0] ?? '', eb: d.optionExplanations?.[1] ?? '', ec: d.optionExplanations?.[2] ?? '', ed: d.optionExplanations?.[3] ?? '', ee: d.optionExplanations?.[4] ?? '',
-    difficulty: d.difficulty ?? 'moderate',
-    showOptionExplanations: !!(d.optionExplanations && d.optionExplanations.some((e) => e?.trim())),
-  }));
-  const generateAiMcqs = useMutation({
-    mutationFn: () => mcqAdminApi.generateAi(Number(topicId), aiCount, aiDifficulty === 'mixed' ? undefined : aiDifficulty),
-    onSuccess: (res) => {
-      setBulkRows(draftsFromAi(res.drafts));
-      toast({ title: `Generated ${res.drafts.length} draft questions`, description: 'Review each before saving — nothing is added to the bank yet.' });
-    },
-    onError: (err: unknown) => toast({ title: 'Could not generate questions', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
-  });
-  // "Full set" — one deliberate easy + moderate + hard batch instead of
-  // leaving the mix up to the model. Three separate calls (one per pinned
-  // difficulty) rather than asking for a bigger mixed batch and hoping the
-  // split comes out even.
-  const generateAiFullSet = useMutation({
-    mutationFn: async () => {
-      const [easy, moderate, hard] = await Promise.all([
-        mcqAdminApi.generateAi(Number(topicId), aiCount, 'easy'),
-        mcqAdminApi.generateAi(Number(topicId), aiCount, 'moderate'),
-        mcqAdminApi.generateAi(Number(topicId), aiCount, 'hard'),
-      ]);
-      return [...easy.drafts, ...moderate.drafts, ...hard.drafts];
-    },
-    onSuccess: (drafts) => {
-      setBulkRows(draftsFromAi(drafts));
-      toast({ title: `Generated ${drafts.length} draft questions`, description: `${aiCount} easy, ${aiCount} moderate, ${aiCount} hard — review before saving.` });
-    },
-    onError: (err: unknown) => toast({ title: 'Could not generate the full set', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
-  });
   const bulkCreateMutation = useMutation({
     mutationFn: () => mcqAdminApi.bulkCreate(bulkRows.filter((r) => r.question.trim() && r.a.trim() && r.b.trim()).map((r) => {
       const options = [r.a, r.b, r.c, r.d, r.e].map((o) => o.trim()).filter(Boolean);
@@ -173,39 +129,14 @@ function AdminMcqs() {
     onError: (err: unknown) => toast({ title: 'Could not add questions', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
   });
 
-  // Target selection shared by both manual add and file import
+  // Target selection shared by both manual add and file import: FSc Year > Subject > Chapter > Topic.
+  const picker = useCurriculumPicker();
+  const { subjectId, topicId, moduleId, ready: targetReady } = picker;
+  // Block / module lists are only needed by the backup panel.
   const blocksQ = useQuery({ queryKey: ['admin-blocks'], queryFn: blockAdminApi.listAll });
   const blocks = blocksQ.data ?? [];
-  const [blockId, setBlockId] = useState('');
-  // useListModules() (the public/student-facing hook) returns a `Module`
-  // shape with no blockId — moduleAdminApi.listAll() returns `AdminModule`,
-  // which carries blockId, so that's what the Block filter (and the bank
-  // tree's grouping) need to filter/group by.
   const modulesQ = useQuery({ queryKey: ['admin-modules'], queryFn: moduleAdminApi.listAll });
   const allModules = modulesQ.data ?? [];
-  // Program (MDCAT) + Year filter, ahead of Block — picking a program
-  // narrows Year to that program's own years (MDCAT via
-  // DEGREE_YEAR_OPTIONS), and narrows the Block/Module picker below to
-  // just that branch, same as groupBlocksForPicker's optgroups but as an
-  // explicit two-step filter instead of scanning every optgroup by hand.
-  const [programFilter, setProgramFilter] = useState('');
-  const [studyYearFilter, setStudyYearFilter] = useState('');
-  const filteredBlocks = filterBlocksByProgramYear(blocks, allModules, programFilter, studyYearToNumber(programFilter, studyYearFilter));
-  // Narrow the module choices to the selected Block, same cascade the
-  // flashcard admin form already uses — "All blocks" (default) shows every
-  // module, matching the previous behavior when nothing is selected.
-  const modules = blockId ? allModules.filter((m) => String(m.blockId ?? '') === blockId) : allModules;
-  const [moduleId, setModuleId] = useState('');
-  const subjectsQ = useListSubjects();
-  const [subjectId, setSubjectId] = useState('');
-  useEffect(() => { const s = subjectsQ.data?.find(s=>String(s.id)===subjectId); setModuleId(s ? String(s.moduleId) : ''); }, [subjectId, subjectsQ.data]);
-  const topicsQ = useListTopics(subjectId ? { subjectId: Number(subjectId) } : undefined);
-  const [topicId, setTopicId] = useState('');
-  const targetReady = !!moduleId && !!subjectId && !!topicId;
-  // Changing Program/Year invalidates whatever Block/Module/Subject/Topic
-  // was already picked (it may no longer be in the filtered branch), same
-  // "reset everything below" pattern the Block select itself already uses.
-  const resetPickerBelowProgramYear = () => { setBlockId(''); setModuleId(''); setSubjectId(''); setTopicId(''); };
 
   // Optional: link imported/manual questions to a past paper
   const pastPapersQ = useQuery({ queryKey: ['admin-past-papers'], queryFn: () => pastPapersApi.list() });
@@ -261,14 +192,12 @@ function AdminMcqs() {
       { label: 'Drafts', value: bankStats.drafts.toLocaleString(), icon: IconEyeOff, tone: bankStats.drafts ? 'amber' : 'neutral', hint: 'Not visible to students', testId: 'stat-mcq-drafts' },
       { label: 'Unassigned', value: bankStats.unassigned.toLocaleString(), icon: IconFolderX, tone: bankStats.unassigned ? 'amber' : 'neutral', hint: 'No topic yet — students cannot practise these by topic', testId: 'stat-mcq-unassigned' },
       { label: 'Need explanation', value: bankStats.needExplanation.toLocaleString(), icon: FileText, tone: bankStats.needExplanation ? 'violet' : 'neutral', hint: 'Explanation status: pending', testId: 'stat-mcq-pending' },
-      { label: 'AI-made', value: bankStats.aiMade.toLocaleString(), icon: Sparkles, tone: 'blue', hint: 'Saved by the student AI MCQ Maker', testId: 'stat-mcq-ai-made' },
     ]} />
-    <AiMcqReviewPanel />
 
     <div className="rounded-3xl border border-primary/30 bg-primary/10 p-6"><div className="flex items-start gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><FileText size={18} /></div><div><h3 className="text-sm font-extrabold">Bulk upload from a file</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">Upload a question bank as .txt, .csv, .xlsx/.xls, .pdf, or .docx. We'll extract the questions automatically — review and fix anything before it's added to the bank.</p></div></div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-5"><select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setTopicId(''); }}  className="h-10 rounded-xl border border-border bg-card px-3 text-xs disabled:opacity-50" data-testid="select-import-subject"><option value="">Select subject</option>{(subjectsQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><select value={topicId} onChange={(e) => setTopicId(e.target.value)} disabled={!subjectId} className="h-10 rounded-xl border border-border bg-card px-3 text-xs disabled:opacity-50" data-testid="select-import-topic"><option value="">Select topic</option><TopicOptions subjectId={subjectId} topics={topicsQ.data || []} /></select><select value={pastPaperId} onChange={(e) => setPastPaperId(e.target.value)} className="h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid="select-import-past-paper"><option value="">No past paper (optional)</option>{(pastPapersQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div>
-      {!targetReady && <p className="mt-2 text-[11px] font-semibold text-accent-text">Pick a subject and topic before uploading — every imported question needs a home.</p>}
+      <div className="mt-5 space-y-3"><CurriculumSelects picker={picker} testIdPrefix="import" /><select value={pastPaperId} onChange={(e) => setPastPaperId(e.target.value)} className="h-10 w-full rounded-xl border border-border bg-card px-3 text-xs sm:w-auto" data-testid="select-import-past-paper"><option value="">No past paper (optional)</option>{(pastPapersQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div>
+      {!targetReady && <p className="mt-2 text-[11px] font-semibold text-accent-text">Pick the subject, chapter and topic before uploading — every imported question needs a home (FSc year → subject → chapter → topic).</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <input type="file" accept=".txt,.csv,.xlsx,.xls,.pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="flex-1 rounded-xl border border-dashed border-border bg-card px-3 py-2.5 text-xs" data-testid="input-mcq-file" />
@@ -319,20 +248,19 @@ function AdminMcqs() {
       const rawOptionExplanations = ['ea', 'eb', 'ec', 'ed', 'ee'].map((x) => String(f.get(x) || '').trim()).slice(0, options.length).map((v) => v || null);
       const optionExplanations = rawOptionExplanations.some((v) => v) ? rawOptionExplanations : undefined;
       create.mutate({ data: { question: String(f.get('question')), options, correctAnswer: correctAnswer ?? '', explanation: String(f.get('explanation')), optionExplanations, reference: '', difficulty: String(f.get('difficulty') || 'moderate'), moduleId: Number(moduleId), subjectId: Number(subjectId), topicId: Number(topicId) } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListMcqsQueryKey() }); e.currentTarget.reset(); setManualShowOptionExplanations(false); } });
-    }} className="mt-6 space-y-3 rounded-2xl border border-border bg-card p-5">{!targetReady && <p className="text-[11px] font-semibold text-accent-text">Select subject/topic above first.</p>}<textarea name="question" required placeholder="Write the question..." className="min-h-20 w-full rounded-xl border border-border bg-background p-3 text-xs" data-testid="input-mcq-question" /><div className="grid gap-3 sm:grid-cols-2">{['a', 'b', 'c', 'd', 'e'].map((x) => <input key={x} name={x} required={x !== 'e'} placeholder={`Option ${x.toUpperCase()}${x === 'e' ? ' (optional)' : ''}`} className="h-10 rounded-xl border border-border bg-background px-3 text-xs" data-testid={`input-mcq-option-${x}`} />)}</div><div className="grid gap-3 sm:grid-cols-2"><label className="flex items-center gap-2 text-xs font-bold">Correct answer<select name="correct" required className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs font-normal" data-testid="select-mcq-correct"><option value="">Select the correct option</option>{['a', 'b', 'c', 'd', 'e'].map((x) => <option key={x} value={x}>{x.toUpperCase()}</option>)}</select></label><label className="flex items-center gap-2 text-xs font-bold">Difficulty<select name="difficulty" defaultValue="moderate" className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs font-normal capitalize" data-testid="select-mcq-difficulty">{['easy', 'moderate', 'hard'].map((x) => <option key={x} value={x}>{x}</option>)}</select></label></div><input name="explanation" placeholder="Explanation shown after answer" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs" data-testid="input-mcq-explanation" />
+    }} className="mt-6 space-y-3 rounded-2xl border border-border bg-card p-5">{!targetReady && <p className="text-[11px] font-semibold text-accent-text">Select the subject and topic above first.</p>}<textarea name="question" required placeholder="Write the question..." className="min-h-20 w-full rounded-xl border border-border bg-background p-3 text-xs" data-testid="input-mcq-question" /><div className="grid gap-3 sm:grid-cols-2">{['a', 'b', 'c', 'd', 'e'].map((x) => <input key={x} name={x} required={x !== 'e'} placeholder={`Option ${x.toUpperCase()}${x === 'e' ? ' (optional)' : ''}`} className="h-10 rounded-xl border border-border bg-background px-3 text-xs" data-testid={`input-mcq-option-${x}`} />)}</div><div className="grid gap-3 sm:grid-cols-2"><label className="flex items-center gap-2 text-xs font-bold">Correct answer<select name="correct" required className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs font-normal" data-testid="select-mcq-correct"><option value="">Select the correct option</option>{['a', 'b', 'c', 'd', 'e'].map((x) => <option key={x} value={x}>{x.toUpperCase()}</option>)}</select></label><label className="flex items-center gap-2 text-xs font-bold">Difficulty<select name="difficulty" defaultValue="moderate" className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs font-normal capitalize" data-testid="select-mcq-difficulty">{['easy', 'moderate', 'hard'].map((x) => <option key={x} value={x}>{x}</option>)}</select></label></div><input name="explanation" placeholder="Explanation shown after answer" className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs" data-testid="input-mcq-explanation" />
       <button type="button" onClick={() => setManualShowOptionExplanations((v) => !v)} className="inline-flex items-center gap-1 text-[11px] font-bold text-primary" data-testid="button-toggle-manual-option-explanations"><CircleHelp size={12} /> {manualShowOptionExplanations ? 'Hide' : 'Add'} per-option explanations</button>
       {manualShowOptionExplanations && <div className="space-y-1.5 rounded-lg bg-muted/50 p-2.5">{['a', 'b', 'c', 'd', 'e'].map((x, oi) => <div key={x} className="flex items-start gap-2"><span className="mt-1.5 grid size-5 shrink-0 place-items-center rounded bg-background text-[10px] font-bold">{x.toUpperCase()}</span><textarea name={`e${x}`} placeholder={`Why option ${x.toUpperCase()} is right or wrong...`} className="min-h-9 flex-1 rounded-lg border border-border bg-background p-2 text-xs" data-testid={`input-mcq-option-explanation-${oi}`} /></div>)}</div>}
       <button disabled={!targetReady} className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid="button-save-mcq">Save as draft</button></form>}
 
-    <div className="mt-8"><SectionHeader eyebrow="Question bank" title={`${allMcqs.length} questions`} action={<div className="flex flex-wrap items-center gap-2"><button onClick={() => setBulkAddOpen((v) => !v)} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-bulk-add">Add multiple</button><button onClick={() => setBackupOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-backup"><Database size={13} className={cn('transition-transform duration-300', backupOpen && 'rotate-180')} /> Export / import backup</button><span className="inline-flex items-center rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground" data-testid="text-bank-view-label">Subjects / topics</span></div>} /><ExplanationCoverage onSelectStatus={(status) => setStatusFilter(status)} />
+    <div className="mt-8"><SectionHeader eyebrow="Question bank" title={`${allMcqs.length} questions`} action={<div className="flex flex-wrap items-center gap-2"><button onClick={() => setBulkAddOpen((v) => !v)} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-bulk-add">Add multiple</button><button onClick={() => setBackupOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-backup"><Database size={13} className={cn('transition-transform duration-300', backupOpen && 'rotate-180')} /> Export / import backup</button><span className="inline-flex items-center rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground" data-testid="text-bank-view-label">Year / subject / chapter / topic</span></div>} /><ExplanationCoverage onSelectStatus={(status) => setStatusFilter(status)} />
 
       {backupOpen && <McqBackupPanel blocks={blocks} allModules={allModules} onRestored={()=>{void queryClient.invalidateQueries();}}/>}
 
 
       {bulkAddOpen && <div className="mt-4 space-y-4 rounded-2xl border border-primary/30 bg-primary/10 p-5">
-        <div className="flex items-center justify-between"><p className="text-xs font-bold">Add multiple MCQs at once — uses the subject/topic selected above.</p><button onClick={() => setBulkRows((rows) => [...rows, ...bulkAddRowsInit()])} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-bold" data-testid="button-add-bulk-row"><Plus size={12} /> Add row</button></div>
-        {!targetReady && <p className="text-[11px] font-semibold text-accent-text">Select subject/topic above first.</p>}
-        {targetReady && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3"><Sparkles size={14} className="text-primary" /><span className="text-[11px] font-bold">Generate</span><select value={aiCount} onChange={(e) => setAiCount(Number(e.target.value))} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid="select-ai-mcq-count">{[3, 5, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}</select><span className="text-[11px] font-bold">questions</span><select value={aiDifficulty} onChange={(e) => setAiDifficulty(e.target.value as typeof aiDifficulty)} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid="select-ai-mcq-difficulty"><option value="mixed">Mixed difficulty</option><option value="easy">Easy only</option><option value="moderate">Moderate only</option><option value="hard">Hard only</option></select><span className="text-[11px] font-bold">with AI for this topic</span><div className="ml-auto flex gap-2"><button type="button" disabled={generateAiFullSet.isPending || generateAiMcqs.isPending} onClick={() => generateAiFullSet.mutate()} title={`Generates ${aiCount} easy + ${aiCount} moderate + ${aiCount} hard in one go`} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary disabled:opacity-50" data-testid="button-generate-ai-full-set">{generateAiFullSet.isPending ? 'Generating set…' : <><Layers size={12} /> Full E/M/H set</>}</button><button type="button" disabled={generateAiMcqs.isPending || generateAiFullSet.isPending} onClick={() => generateAiMcqs.mutate()} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50" data-testid="button-generate-ai-mcqs">{generateAiMcqs.isPending ? 'Generating…' : <><Sparkles size={12} /> Generate</>}</button></div></div>}
+        <div className="flex items-center justify-between"><p className="text-xs font-bold">Add multiple MCQs at once — uses the year / subject / chapter / topic selected above.</p><button onClick={() => setBulkRows((rows) => [...rows, ...bulkAddRowsInit()])} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-bold" data-testid="button-add-bulk-row"><Plus size={12} /> Add row</button></div>
+        {!targetReady && <p className="text-[11px] font-semibold text-accent-text">Select the subject and topic above first.</p>}
         <div className="space-y-3">{bulkRows.map((row, i) => <div key={i} className="rounded-xl border border-border bg-card p-3">
           <div className="flex items-center justify-between"><span className="text-[11px] font-bold text-muted-foreground">Question {i + 1}</span>{bulkRows.length > 1 && <button onClick={() => setBulkRows((rows) => rows.filter((_, ri) => ri !== i))} className="text-[11px] font-bold text-destructive" data-testid={`button-remove-bulk-row-${i}`}>Remove</button>}</div>
           <textarea value={row.question} onChange={(e) => setBulkRows((rows) => rows.map((r, ri) => ri === i ? { ...r, question: e.target.value } : r))} placeholder="Write the question..." className="mt-2 min-h-14 w-full rounded-lg border border-border bg-background p-2 text-xs" data-testid={`input-bulk-question-${i}`} />
@@ -356,10 +284,8 @@ function AdminMcqs() {
           {(['easy', 'moderate', 'hard'] as const).map((d) => <Chip key={d} active={difficultyFilter === d} onClick={() => setDifficultyFilter(difficultyFilter === d ? null : d)} testId={`chip-mcq-difficulty-${d}`}><span className="capitalize">{d}</span></Chip>)}
           <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
           {(['published', 'draft'] as const).map((k) => <Chip key={k} active={publishFilter === k} onClick={() => setPublishFilter(publishFilter === k ? null : k)} testId={`chip-mcq-state-${k}`}><span className="capitalize">{k}</span></Chip>)}
-          <span className="mx-0.5 h-5 w-px bg-border" aria-hidden="true" />
-          <Chip active={aiOnly} onClick={() => setAiOnly((v) => !v)} icon={Sparkles} testId="chip-mcq-source-ai">AI-made</Chip>
         </div>
-        {anyFilter && <button onClick={() => { setSearch(''); setStatusFilter(null); setDifficultyFilter(null); setPublishFilter(null); setAiOnly(false); }} className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:underline" data-testid="button-clear-all-mcq-filters">Clear all</button>}
+        {anyFilter && <button onClick={() => { setSearch(''); setStatusFilter(null); setDifficultyFilter(null); setPublishFilter(null); }} className="text-[11px] font-bold text-muted-foreground underline-offset-2 hover:underline" data-testid="button-clear-all-mcq-filters">Clear all</button>}
         {anyFilter && <span className="text-[11px] text-muted-foreground">{mcqs.length} match{mcqs.length === 1 ? '' : 'es'}</span>}
       </div>
 
@@ -374,7 +300,7 @@ function AdminMcqs() {
         {selectedIds.size > 0 && <button onClick={() => setBulkDeleteMode('selected')} className="inline-flex items-center gap-1 rounded-lg border border-destructive/30 px-2.5 py-1.5 text-[11px] font-bold text-destructive" data-testid="button-bulk-delete-selected"><Trash2 size={12} /> Delete selected</button>}
       </div>
 
-      <div className="mt-3"><McqBankTree modules={allModules} blocks={blocks} search={search} statusFilter={statusFilter} difficultyFilter={difficultyFilter} publishFilter={publishFilter} sourceFilter={aiOnly ? STUDENT_AI_SOURCE : null} selectedIds={selectedIds} onToggleSelect={toggleSelected} /></div>
+      <div className="mt-3"><McqBankTree search={search} statusFilter={statusFilter} difficultyFilter={difficultyFilter} publishFilter={publishFilter} selectedIds={selectedIds} onToggleSelect={toggleSelected} /></div>
       {bulkDeleteMode === 'selected' && <ConfirmDialog title={`Delete ${selectedIds.size} selected question${selectedIds.size === 1 ? '' : 's'}?`} body="They'll be removed from the bank and from any draft exams using them." confirmLabel="Delete selected" onCancel={() => setBulkDeleteMode(null)} onConfirm={() => bulkDelete.mutate(Array.from(selectedIds))} pending={bulkDelete.isPending} />}
       </div>
   </div>;

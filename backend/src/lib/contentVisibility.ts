@@ -1,11 +1,16 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db, usersTable, programsTable, academicYearsTable, modulesTable, blocksTable, notificationsTable, courseYearsTable } from "@workspace/db";
+import { resolveCourseYearAccess, resolveCourseYearAccessMap } from "./courseYearAccess";
 
 export interface StudentTargeting {
   programKind: string | null;
   yearNumber: number | null;
   /** The student's FSc course year (med_course_years.id) picked at signup, if any. */
   courseYearId?: number | null;
+  /** FSc years this student may study, derived from the plan(s) they bought
+   * (see courseYearAccess.ts). null = every year; undefined = not resolved,
+   * in which case the signup course year above is used. */
+  courseYearIds?: number[] | null;
 }
 
 /** FSc course-year gate shared by every content type. An empty/missing list
@@ -14,6 +19,8 @@ export interface StudentTargeting {
 export function courseYearAllows(courseYearIds: number[] | null | undefined, targeting: StudentTargeting): boolean {
   const ids = courseYearIds ?? [];
   if (!ids.length) return true;
+  if (targeting.courseYearIds === null) return true;
+  if (targeting.courseYearIds !== undefined) return ids.some((id) => targeting.courseYearIds!.includes(id));
   return targeting.courseYearId != null && ids.includes(targeting.courseYearId);
 }
 
@@ -23,7 +30,7 @@ export function courseYearAllows(courseYearIds: number[] | null | undefined, tar
  * targeted content until an admin (or their own profile) sets these. */
 export async function getStudentTargeting(userId: number): Promise<StudentTargeting> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user) return { programKind: null, yearNumber: null, courseYearId: null };
+  if (!user) return { programKind: null, yearNumber: null, courseYearId: null, courseYearIds: [] };
 
   const [program] = user.programId ? await db.select().from(programsTable).where(eq(programsTable.id, user.programId)) : [];
   const [academicYear] = user.academicYearId ? await db.select().from(academicYearsTable).where(eq(academicYearsTable.id, user.academicYearId)) : [];
@@ -32,6 +39,7 @@ export async function getStudentTargeting(userId: number): Promise<StudentTarget
     programKind: program?.kind ? program.kind.trim().toUpperCase() : null,
     yearNumber: academicYear?.yearNumber ?? null,
     courseYearId: user.courseYearId ?? null,
+    courseYearIds: await resolveCourseYearAccess(userId),
   };
 }
 
@@ -134,11 +142,13 @@ export async function notifyTargetedStudents(
   const programKindById = new Map(programs.map((p) => [p.id, p.kind ? p.kind.trim().toUpperCase() : null]));
   const yearNumberById = new Map(academicYears.map((y) => [y.id, y.yearNumber]));
 
+  const accessByUser = courseYearIds.length ? await resolveCourseYearAccessMap(students.map((s) => s.id)) : new Map<number, number[] | null>();
   const targetIds = students
     .filter((s) => {
       const kind = s.programId ? programKindById.get(s.programId) ?? null : null;
       const year = s.academicYearId ? yearNumberById.get(s.academicYearId) ?? null : null;
-      const courseOk = !courseYearIds.length || (s.courseYearId != null && courseYearIds.includes(s.courseYearId));
+      const access = accessByUser.get(s.id) ?? null;
+      const courseOk = !courseYearIds.length || access === null || courseYearIds.some((id) => access.includes(id));
       return (!normalizedKind || kind === normalizedKind) && (!yearTargetNumber || year === yearTargetNumber) && courseOk;
     })
     .map((s) => s.id);
