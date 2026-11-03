@@ -73,15 +73,15 @@ function StudentDevicesSection({ studentId }: { studentId: number }) {
 // once a student drawer is opened, so it must not sit in the entry bundle.
 const Student360Panel = lazy(() => import('@/components/Student360').then((m) => ({ default: m.Student360Panel })));
 // Admin can edit everything about a student's profile: name, email, phone,
-// roll number, college, program (MDCAT/BDS) and academic year. The PATCH
+// roll number, college, program (MDCAT) and academic year. The PATCH
 // endpoint re-points the student's program/year records the same way
 // sign-up does, so content visibility follows the change immediately.
 function EditStudentDetails({ s, onSaved }: { s: StudentDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', rollNumber: '', institutionId: 0, programKind: '' as '' | 'MDCAT' | 'BDS', yearNumber: 0 });
-  const reset = () => setForm({ name: s.name, email: s.email, phone: s.phone ?? '', rollNumber: s.rollNumber ?? '', institutionId: s.institutionId ?? 0, programKind: (s.programKind ?? '') as '' | 'MDCAT' | 'BDS', yearNumber: s.yearNumber ?? 0 });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', rollNumber: '', institutionId: 0, programKind: '' as '' | 'MDCAT', yearNumber: 0 });
+  const reset = () => setForm({ name: s.name, email: s.email, phone: s.phone ?? '', rollNumber: s.rollNumber ?? '', institutionId: s.institutionId ?? 0, programKind: (s.programKind ?? '') as '' | 'MDCAT', yearNumber: s.yearNumber ?? 0 });
   const institutions = useQuery({ queryKey: ['institutions', 'edit-student', form.programKind], queryFn: () => academicApi.institutions(undefined, form.programKind || undefined), enabled: open });
-  const maxYear = form.programKind === 'BDS' ? 4 : 1;
+  const maxYear = 1;
   const save = useMutation({
     mutationFn: () => studentsAdminApi.update(s.id, {
       name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(), rollNumber: form.rollNumber.trim(),

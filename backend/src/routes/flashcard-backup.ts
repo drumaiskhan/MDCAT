@@ -47,7 +47,7 @@ const ExportQuery = z.object({
   // them — used as-is for the filename/embedded scope so it always matches
   // what they picked, with describeScope as a fallback when it's missing.
   scopeLabel: z.string().optional(),
-  // MDCAT / BDS / SHARED — only used with scopeLevel "program" or "year".
+  // MDCAT / SHARED — only used with scopeLevel "program" or "year".
   scopeProgram: z.enum(BACKUP_PROGRAMS).optional(),
 });
 

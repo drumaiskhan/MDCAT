@@ -1,9 +1,20 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { db, usersTable, programsTable, academicYearsTable, modulesTable, blocksTable, notificationsTable } from "@workspace/db";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { db, usersTable, programsTable, academicYearsTable, modulesTable, blocksTable, notificationsTable, courseYearsTable } from "@workspace/db";
 
 export interface StudentTargeting {
   programKind: string | null;
   yearNumber: number | null;
+  /** The student's FSc course year (med_course_years.id) picked at signup, if any. */
+  courseYearId?: number | null;
+}
+
+/** FSc course-year gate shared by every content type. An empty/missing list
+ * means "every course year"; otherwise the student must be filed under one
+ * of the listed course years (a combined FSc-I + FSc-II item lists both). */
+export function courseYearAllows(courseYearIds: number[] | null | undefined, targeting: StudentTargeting): boolean {
+  const ids = courseYearIds ?? [];
+  if (!ids.length) return true;
+  return targeting.courseYearId != null && ids.includes(targeting.courseYearId);
 }
 
 /** Looks up a student's normalized program kind (e.g. "MDCAT") and year
@@ -12,7 +23,7 @@ export interface StudentTargeting {
  * targeted content until an admin (or their own profile) sets these. */
 export async function getStudentTargeting(userId: number): Promise<StudentTargeting> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user) return { programKind: null, yearNumber: null };
+  if (!user) return { programKind: null, yearNumber: null, courseYearId: null };
 
   const [program] = user.programId ? await db.select().from(programsTable).where(eq(programsTable.id, user.programId)) : [];
   const [academicYear] = user.academicYearId ? await db.select().from(academicYearsTable).where(eq(academicYearsTable.id, user.academicYearId)) : [];
@@ -20,6 +31,7 @@ export async function getStudentTargeting(userId: number): Promise<StudentTarget
   return {
     programKind: program?.kind ? program.kind.trim().toUpperCase() : null,
     yearNumber: academicYear?.yearNumber ?? null,
+    courseYearId: user.courseYearId ?? null,
   };
 }
 
@@ -29,14 +41,20 @@ export async function getStudentTargeting(userId: number): Promise<StudentTarget
  * kind/year is only visible to matching students. */
 export async function getVisibleModuleIds(targeting: StudentTargeting): Promise<number[]> {
   const rows = await db
-    .select({ id: modulesTable.id })
+    .select({ id: modulesTable.id, blockId: modulesTable.blockId, courseYearIds: modulesTable.courseYearIds })
     .from(modulesTable)
     .where(and(
       eq(modulesTable.active, true),
       or(isNull(modulesTable.programTargetKind), targeting.programKind ? eq(modulesTable.programTargetKind, targeting.programKind) : isNull(modulesTable.programTargetKind)),
       or(isNull(modulesTable.yearTargetNumber), targeting.yearNumber !== null ? eq(modulesTable.yearTargetNumber, targeting.yearNumber) : isNull(modulesTable.yearTargetNumber)),
     ));
-  return rows.map((r) => r.id);
+  // FSc course years: a module's own list wins; an empty list inherits its
+  // block's, so tagging a Block FSc-I also hides the modules inside it.
+  const blockRows = await db.select({ id: blocksTable.id, courseYearIds: blocksTable.courseYearIds }).from(blocksTable);
+  const blockYears = new Map(blockRows.map((b) => [b.id, b.courseYearIds ?? []]));
+  return rows
+    .filter((r) => courseYearAllows((r.courseYearIds ?? []).length ? r.courseYearIds : (r.blockId != null ? blockYears.get(r.blockId) : []), targeting))
+    .map((r) => r.id);
 }
 
 /** Generic version of the null-means-everyone matching logic GET /modules
@@ -46,10 +64,10 @@ export async function getVisibleModuleIds(targeting: StudentTargeting): Promise<
  * subtly different one per route. Null on either axis always passes that
  * axis; a set value only passes for a student whose own targeting matches
  * it exactly. */
-export function isTargetVisible(programTargetKind: string | null, yearTargetNumber: number | null, targeting: StudentTargeting): boolean {
+export function isTargetVisible(programTargetKind: string | null, yearTargetNumber: number | null, targeting: StudentTargeting, courseYearIds?: number[] | null): boolean {
   const programOk = !programTargetKind || (targeting.programKind !== null && targeting.programKind === programTargetKind);
   const yearOk = !yearTargetNumber || (targeting.yearNumber !== null && targeting.yearNumber === yearTargetNumber);
-  return programOk && yearOk;
+  return programOk && yearOk && courseYearAllows(courseYearIds, targeting);
 }
 
 /** Blocks equivalent of getVisibleModuleIds — was previously missing
@@ -59,10 +77,10 @@ export function isTargetVisible(programTargetKind: string | null, yearTargetNumb
  * badge, never actual visibility). */
 export async function getVisibleBlockIds(targeting: StudentTargeting): Promise<number[]> {
   const rows = await db
-    .select({ id: blocksTable.id, programTargetKind: blocksTable.programTargetKind, yearTargetNumber: blocksTable.yearTargetNumber })
+    .select({ id: blocksTable.id, programTargetKind: blocksTable.programTargetKind, yearTargetNumber: blocksTable.yearTargetNumber, courseYearIds: blocksTable.courseYearIds })
     .from(blocksTable)
     .where(eq(blocksTable.active, true));
-  return rows.filter((r) => isTargetVisible(r.programTargetKind, r.yearTargetNumber, targeting)).map((r) => r.id);
+  return rows.filter((r) => isTargetVisible(r.programTargetKind, r.yearTargetNumber, targeting, r.courseYearIds)).map((r) => r.id);
 }
 
 /** Human-readable summary of a module's targeting, for admin UI badges. */
@@ -70,6 +88,15 @@ export function describeModuleTargeting(programTargetKind: string | null, yearTa
   const programLabel = programTargetKind || "All Programs";
   const yearLabel = yearTargetNumber ? `${yearTargetNumber}${["th", "st", "nd", "rd"][yearTargetNumber % 10 > 3 || Math.floor(yearTargetNumber % 100 / 10) === 1 ? 0 : yearTargetNumber % 10]} Year` : "All Years";
   return `${programLabel} + ${yearLabel}`;
+}
+
+/** Looks up course-year names (e.g. "FSc-I") for admin badges. */
+export async function courseYearNames(ids: number[] | null | undefined): Promise<string[]> {
+  const list = ids ?? [];
+  if (!list.length) return [];
+  const rows = await db.select({ id: courseYearsTable.id, name: courseYearsTable.name }).from(courseYearsTable).where(inArray(courseYearsTable.id, list));
+  const byId = new Map(rows.map((r) => [r.id, r.name]));
+  return list.map((id) => byId.get(id)).filter((n): n is string => !!n);
 }
 
 /** Notifies every student whose own program/year matches the given
@@ -88,19 +115,20 @@ export async function notifyTargetedStudents(
   title: string,
   body: string,
   type: "info" | "success" | "warning" = "info",
+  courseYearIds: number[] = [],
 ): Promise<number> {
   const normalizedKind = programTargetKind ? programTargetKind.trim().toUpperCase() : null;
 
   // Untargeted content (visible to every program/year) reaches everyone —
   // use the same userId=NULL "visible to everyone" convention the manual
   // broadcast uses, instead of inserting one row per student.
-  if (!normalizedKind && !yearTargetNumber) {
+  if (!normalizedKind && !yearTargetNumber && !courseYearIds.length) {
     await db.insert(notificationsTable).values({ userId: null, title, body, type });
     const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(usersTable).where(eq(usersTable.role, "student"));
     return Number(count ?? 0);
   }
 
-  const students = await db.select({ id: usersTable.id, programId: usersTable.programId, academicYearId: usersTable.academicYearId }).from(usersTable).where(eq(usersTable.role, "student"));
+  const students = await db.select({ id: usersTable.id, programId: usersTable.programId, academicYearId: usersTable.academicYearId, courseYearId: usersTable.courseYearId }).from(usersTable).where(eq(usersTable.role, "student"));
   const programs = await db.select().from(programsTable);
   const academicYears = await db.select().from(academicYearsTable);
   const programKindById = new Map(programs.map((p) => [p.id, p.kind ? p.kind.trim().toUpperCase() : null]));
@@ -110,7 +138,8 @@ export async function notifyTargetedStudents(
     .filter((s) => {
       const kind = s.programId ? programKindById.get(s.programId) ?? null : null;
       const year = s.academicYearId ? yearNumberById.get(s.academicYearId) ?? null : null;
-      return (!normalizedKind || kind === normalizedKind) && (!yearTargetNumber || year === yearTargetNumber);
+      const courseOk = !courseYearIds.length || (s.courseYearId != null && courseYearIds.includes(s.courseYearId));
+      return (!normalizedKind || kind === normalizedKind) && (!yearTargetNumber || year === yearTargetNumber) && courseOk;
     })
     .map((s) => s.id);
 

@@ -6,7 +6,7 @@ import { requireAuth, requireAdmin, isAdminRole } from "../middlewares/auth";
 import { getStudentTargeting, getVisibleModuleIds } from "../lib/contentVisibility";
 
 // Chapters: Subject → Chapter → Topic. A chapter only groups topics; MCQs,
-// flashcards and lectures stay on their topic and inherit the chapter from it.
+// flashcards and lectures stay on their topic and inherit the chapter from it (a lecture may also be filed directly under a chapter).
 const router: IRouter = Router();
 
 type ChapterRow = typeof chaptersTable.$inferSelect;

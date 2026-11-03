@@ -1,6 +1,6 @@
-# Handoff note — v13 changes (MDCAT/BDS college split)
+# Handoff note — v13 changes (MDCAT college split)
 
-Scope: colleges are now typed as MDCAT or BDS at the **institution** level
+Scope: colleges are now typed as MDCAT or MDCAT at the **institution** level
 (not just at the program level underneath them), across the DB schema, the
 API, and both frontends. Touches:
 - `lib/db/src/schema/medschool.ts`
@@ -22,34 +22,34 @@ before trusting this in prod.**
 
 ## Why
 
-The ask: an MDCAT college and a BDS college are different institutions, and
+The ask: an MDCAT college and a MDCAT college are different institutions, and
 the college picker (both in admin and at student registration) should
-reflect that instead of treating "college" as one flat list with MDCAT/BDS
+reflect that instead of treating "college" as one flat list with MDCAT
 picked separately and disconnected from it.
 
 ## What changed
 
 1. **New `kind` column on `med_institutions`.** Previously only
-   `med_programs` had a `kind` (MDCAT/BDS/OTHER), scoped *under* an
+   `med_programs` had a `kind` (MDCAT/OTHER), scoped *under* an
    institution. Now the institution row itself carries `kind: TEXT NOT
    NULL DEFAULT ''` — `""` for legacy rows created before this existed,
-   `"MDCAT"` or `"BDS"` for everything the admin UI creates going forward.
+   `"MDCAT"` or `"MDCAT"` for everything the admin UI creates going forward.
    Added via the same idempotent `CREATE TABLE IF NOT EXISTS` +
    `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` pattern as every other
    column added post-launch (see `ensureSchema.ts`), so this is safe to
    run against an existing database — no rows disappear, they just start
    out unset.
 
-2. **`GET /institutions` accepts `?kind=MDCAT|BDS`.** Uppercased and
+2. **`GET /institutions` accepts `?kind=MDCAT|MDCAT`.** Uppercased and
    matched exactly; omitting it returns every institution regardless of
    kind (used by the admin "Colleges & courses" page, which still shows
    everything, just split into tabs client-side). `POST`/`PATCH
    /institutions` accept and persist `kind` the same way `/programs`
    already did.
 
-3. **Admin — Institutions list is now tabbed by MDCAT / BDS.**
+3. **Admin — Institutions list is now tabbed by MDCAT.**
    (`AdminInstitutionsList` in `frontend-admin/src/App.tsx`.)
-   - Two tabs, "MDCAT colleges" and "BDS colleges", each with a live count.
+   - Two tabs, "MDCAT colleges" and "MDCAT colleges", each with a live count.
    - A third "Unset" tab appears **only** if any institution still has
      `kind === ''` (i.e. only matters for pre-existing data) — once
      everything is categorized it disappears on its own.
@@ -57,36 +57,36 @@ picked separately and disconnected from it.
      the active tab only, not the whole table — MDCAT colleges are
      never shown together, so their order numbers don't need to be
      globally unique, only unique within their own kind.
-   - The "Add college" form has a required MDCAT/BDS selector that
+   - The "Add college" form has a required MDCAT selector that
      defaults to whichever tab is currently open (switch tabs, and the
      next college you add defaults to that tab's type).
-   - Every row has an inline type dropdown (Unset/MDCAT/BDS) so an existing
+   - Every row has an inline type dropdown (Unset/MDCAT) so an existing
      entry — including legacy ones — can be corrected at any time, not
      just set once.
    - `ProgramsColumn` (the programme list nested under a selected
      institution) now defaults its own "add program" kind dropdown to the
-     parent institution's kind when it has one, e.g. picking a BDS college
-     defaults the next program you add under it to BDS too. **Not
+     parent institution's kind when it has one, e.g. picking a MDCAT college
+     defaults the next program you add under it to MDCAT too. **Not
      enforced** — an admin can still explicitly choose a different kind
      (e.g. "Other") for a program under a typed institution. Flagged in
      case you want that locked down; wasn't in the original ask.
 
 4. **Student registration — Program now comes before College.**
    (`Register` in `frontend-student/src/App.tsx`.)
-   - Field order changed: Full name → **Program (MDCAT/BDS)** → **College**
+   - Field order changed: Full name → **Program (MDCAT)** → **College**
      → Academic year → Email/Phone → Password → Plan. Previously College
      came first and Program/Year were paired in a 2-column row after it;
      now each of Program/College/Year is its own full-width row, since
      College can't be picked (or make sense) until Program is chosen.
    - The college `<select>` is disabled until a program is picked, its
      query is now `academicApi.institutions(true, programKind)` (query key
-     includes `programKind` so switching MDCAT↔BDS refetches instead of
+     includes `programKind` so switching MDCAT↔MDCAT refetches instead of
      reusing a cached list), and it only lists colleges of that kind.
    - Switching Program after a college was already selected clears the
      selected college (it may not exist in the new list) — handled via a
      `useEffect` on `programKind`.
    - Empty-state copy updated to be kind-specific: "No MDCAT colleges are
-     set up yet…" / "No BDS colleges are set up yet…".
+     set up yet…" / "No MDCAT colleges are set up yet…".
 
 5. **Both `api.ts` files** (`frontend-admin` and `frontend-student`): added
    `kind` to the `Institution` interface, added a small `qs()` query-string
@@ -118,13 +118,13 @@ picked separately and disconnected from it.
 - Migration: point `ensureSchema` at a copy of the real (non-empty)
   database and confirm `med_institutions` gets the `kind` column with no
   errors and no existing rows lost.
-- Admin → Colleges & courses: switch between MDCAT/BDS tabs, add a college
+- Admin → Colleges & courses: switch between MDCAT tabs, add a college
   in each, use the reorder arrows in both tabs, and (if you have any
   pre-existing institutions) confirm they show up under "Unset" and that
   setting their type via the inline dropdown moves them to the right tab
   and makes "Unset" disappear once it's empty.
-- Admin: under a BDS-typed institution, add a programme and confirm the
-  kind dropdown defaults to BDS (and that you can still override it).
+- Admin: under a MDCAT-typed institution, add a programme and confirm the
+  kind dropdown defaults to MDCAT (and that you can still override it).
 - Student registration: confirm College stays disabled until a Program is
   picked, that switching Program clears an already-picked College, and
   that the College list only shows colleges of the selected kind.

@@ -19,7 +19,7 @@ export type BackupScopeLevel = (typeof BACKUP_SCOPE_LEVELS)[number];
 
 // "SHARED" = content with no program targeting at all (visible to MDCAT
 // alike) — the third bucket next to the two real programs.
-export const BACKUP_PROGRAMS = ["MDCAT", "BDS", "SHARED"] as const;
+export const BACKUP_PROGRAMS = ["MDCAT", "SHARED"] as const;
 export type BackupProgram = (typeof BACKUP_PROGRAMS)[number];
 
 // `id` is the block/module/subject/topic's row id for those four levels, or
@@ -146,8 +146,8 @@ export async function describeScope(level: BackupScopeLevel, id: number): Promis
 // A filesystem-safe slug of a scope's label, for the downloaded file name.
 export function scopeFilenamePart(scope: BackupScope | null): string {
   if (!scope) return "full";
-  // Program/year labels already read "MDCAT · Year 2" — slugging the label alone
-  // gives "mbbs-year-2", so the level prefix would just be noise.
+  // Program/year labels already read "MDCAT · Year 1" — slugging the label alone
+  // gives "mdcat-year-1", so the level prefix would just be noise.
   if (scope.level === "program" || scope.level === "year") {
     const label = scope.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     return label || `${scope.level}-${scope.id}`;

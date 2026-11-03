@@ -10,3 +10,4 @@ export * from './shared-parts/structure';
 export * from './shared-parts/bank';
 export * from './shared-parts/auth';
 export * from './shared-parts/groups';
+export * from './shared-parts/courseYears';

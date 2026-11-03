@@ -78,7 +78,7 @@ function Profile() {
   // codegen `User` shape (id/name/email/role/status/institution/program
   // only — see lib/api-zod/src/generated/types/user.ts). That's a
   // type-level ceiling, not a server one: /auth/me itself now also
-  // resolves and returns the student's real MDCAT/BDS programKind,
+  // resolves and returns the student's real MDCAT programKind,
   // academicYear label/yearNumber, and profile picture (see userPublicView
   // in auth.ts) — those fields were just invisible here because this
   // page's `q.data` was typed too narrowly to see them. Switched to the
@@ -150,7 +150,7 @@ function Profile() {
   const daysRemaining = dashboard.data?.membershipExpiry ? Math.max(0, Math.ceil((new Date(dashboard.data.membershipExpiry).getTime() - Date.now()) / 86400000)) : null;
   // "MDCAT · 3rd Year" when both are known; falls back gracefully for any
   // account that (still) has neither set.
-  const programYearLabel = [u.programKind, u.academicYear].filter(Boolean).join(' · ') || u.program || 'Medical student';
+  const programYearLabel = [u.programKind, u.courseYear || u.academicYear].filter(Boolean).join(' · ') || u.program || 'MDCAT student';
   const avatarUrl = pendingPicture?.previewUrl ?? resolveUploadUrl(u.profilePictureUrl ?? u.profilePicturePath);
 
   const handlePictureChange = async (file: File | undefined | null) => {

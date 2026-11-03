@@ -573,7 +573,7 @@ export const ListStudentsResponseItem = zod.object({
   "email": zod.string(),
   "institution": zod.string(),
   "program": zod.string(),
-  // Normalized program kind (MDCAT/BDS) and academic year number, mirroring
+  // Normalized program kind (MDCAT) and academic year number, mirroring
   // modulesTable's programTargetKind/yearTargetNumber — added so the admin
   // students list can group by year the same way the MCQ bank groups
   // modules. Null for legacy rows with no programId/academicYearId set.

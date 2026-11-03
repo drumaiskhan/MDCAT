@@ -11,7 +11,7 @@ import { getStudentTargeting } from "./contentVisibility";
  *
  * Settings keys (all in platform_settings, all plain strings):
  *   GLOBAL_TRIAL_MODE      "true" turns the trial on — anything else is off.
- *   GLOBAL_TRIAL_PROGRAM   "" (every program) | "MDCAT" | "BDS".
+ *   GLOBAL_TRIAL_PROGRAM   "" (every program) | "MDCAT".
  *   GLOBAL_TRIAL_YEARS     Comma-separated academic years, e.g. "1,2,3".
  *                          Empty = every year. Replaces the old
  *                          single-year GLOBAL_TRIAL_YEAR, which is still read

@@ -236,7 +236,7 @@ router.get("/student/dashboard", requireAuth, async (req, res): Promise<void> =>
   // /past-papers, /exams — was missing here, which is why the dashboard's
   // "Continue learning"/"Recommended for you" always showed every active
   // module (e.g. a Year-1 "Foundation I" module) to every student
-  // regardless of their actual registered program (MDCAT/BDS/etc) and year.
+  // regardless of their actual registered program (MDCAT/etc) and year.
   // Nothing hardcoded: a student's targeting is looked up fresh from their
   // own programId/academicYearId on every request via getStudentTargeting.
   const isAdmin = isAdminRole(req.user!.role);
@@ -563,9 +563,11 @@ router.get("/blocks", requireAuth, async (req, res): Promise<void> => {
     iconUrl: resolveFileUrl(row.iconPath, { transform: THUMBNAIL_TRANSFORM }),
     displayOrder: row.displayOrder,
     active: row.active,
-    ...(isAdmin ? { programTargetKind: row.programTargetKind, yearTargetNumber: row.yearTargetNumber, targetingLabel: describeModuleTargeting(row.programTargetKind, row.yearTargetNumber) } : {}),
+    ...(isAdmin ? { programTargetKind: row.programTargetKind, yearTargetNumber: row.yearTargetNumber, courseYearIds: row.courseYearIds ?? [], targetingLabel: describeModuleTargeting(row.programTargetKind, row.yearTargetNumber) } : {}),
   })));
 });
+
+const CourseYearIdsField = z.array(z.number().int().positive()).max(20).optional();
 
 const BlockBody = z.object({
   name: z.string().min(1),
@@ -575,6 +577,7 @@ const BlockBody = z.object({
   displayOrder: z.number().int().optional(),
   programTargetKind: z.string().max(40).nullable().optional(),
   yearTargetNumber: z.number().int().min(1).max(5).nullable().optional(),
+  courseYearIds: CourseYearIdsField,
 });
 
 router.post("/blocks", requireAdmin, async (req, res): Promise<void> => {
@@ -589,24 +592,26 @@ router.post("/blocks", requireAdmin, async (req, res): Promise<void> => {
     displayOrder: parsed.data.displayOrder ?? Number(maxRow?.max ?? -1) + 1,
     programTargetKind: parsed.data.programTargetKind ? parsed.data.programTargetKind.trim().toUpperCase() : null,
     yearTargetNumber: parsed.data.yearTargetNumber ?? null,
+    courseYearIds: [...new Set(parsed.data.courseYearIds ?? [])],
   }).returning();
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "BLOCK_CREATED", entity: "block", entityId: block.id });
-  res.status(201).json({ id: block.id, name: block.name, subtitle: block.subtitle, iconUrl: resolveFileUrl(block.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: block.displayOrder, active: block.active });
+  res.status(201).json({ id: block.id, name: block.name, subtitle: block.subtitle, iconUrl: resolveFileUrl(block.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: block.displayOrder, active: block.active, programTargetKind: block.programTargetKind, yearTargetNumber: block.yearTargetNumber, courseYearIds: block.courseYearIds ?? [], targetingLabel: describeModuleTargeting(block.programTargetKind, block.yearTargetNumber) });
 });
 
 router.patch("/blocks/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const parsed = BlockBody.partial().safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid block" }); return; }
-  const { programTargetKind, yearTargetNumber, ...rest } = parsed.data;
+  const { programTargetKind, yearTargetNumber, courseYearIds, ...rest } = parsed.data;
   const [block] = await db.update(blocksTable).set({
     ...rest,
+    ...(courseYearIds !== undefined ? { courseYearIds: [...new Set(courseYearIds)] } : {}),
     ...(programTargetKind !== undefined ? { programTargetKind: programTargetKind ? programTargetKind.trim().toUpperCase() : null } : {}),
     ...(yearTargetNumber !== undefined ? { yearTargetNumber } : {}),
   }).where(eq(blocksTable.id, id)).returning();
   if (!block) { res.status(404).json({ error: "Block not found" }); return; }
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "BLOCK_UPDATED", entity: "block", entityId: block.id });
-  res.json({ id: block.id, name: block.name, subtitle: block.subtitle, iconUrl: resolveFileUrl(block.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: block.displayOrder, active: block.active, programTargetKind: block.programTargetKind, yearTargetNumber: block.yearTargetNumber, targetingLabel: describeModuleTargeting(block.programTargetKind, block.yearTargetNumber) });
+  res.json({ id: block.id, name: block.name, subtitle: block.subtitle, iconUrl: resolveFileUrl(block.iconPath, { transform: THUMBNAIL_TRANSFORM }), displayOrder: block.displayOrder, active: block.active, programTargetKind: block.programTargetKind, yearTargetNumber: block.yearTargetNumber, courseYearIds: block.courseYearIds ?? [], targetingLabel: describeModuleTargeting(block.programTargetKind, block.yearTargetNumber) });
 });
 
 router.delete("/blocks/:id", requireAdmin, async (req, res): Promise<void> => {
@@ -684,7 +689,7 @@ router.get("/modules", requireAuth, async (req, res): Promise<void> => {
       // Round 3, item 7 — optional module-level thumbnail, same
       // resolveFileUrl() convention as med_blocks.iconPath.
       iconUrl: resolveFileUrl(row.iconPath),
-      ...(isAdmin ? { programTargetKind: row.programTargetKind, yearTargetNumber: row.yearTargetNumber, targetingLabel: describeModuleTargeting(row.programTargetKind, row.yearTargetNumber) } : {}),
+      ...(isAdmin ? { programTargetKind: row.programTargetKind, yearTargetNumber: row.yearTargetNumber, courseYearIds: row.courseYearIds ?? [], targetingLabel: describeModuleTargeting(row.programTargetKind, row.yearTargetNumber) } : {}),
     };
   });
   res.json(withCounts);
@@ -693,6 +698,7 @@ router.get("/modules", requireAuth, async (req, res): Promise<void> => {
 const ModuleTargetingFields = {
   programTargetKind: z.string().max(40).nullable().optional(),
   yearTargetNumber: z.number().int().min(1).max(5).nullable().optional(),
+  courseYearIds: CourseYearIdsField,
   blockId: z.number().int().positive().nullable().optional(),
   displayOrder: z.number().int().optional(),
   // Round 3, item 7 — optional module thumbnail, storage path from the
@@ -711,6 +717,7 @@ router.post("/modules", requireAdmin, async (req, res): Promise<void> => {
     displayOrder: parsed.data.displayOrder ?? Number(maxRow?.max ?? -1) + 1,
     programTargetKind: parsed.data.programTargetKind ? parsed.data.programTargetKind.trim().toUpperCase() : null,
     yearTargetNumber: parsed.data.yearTargetNumber ?? null,
+    courseYearIds: [...new Set(parsed.data.courseYearIds ?? [])],
   }).returning();
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "MODULE_CREATED", entity: "module", entityId: module.id });
   res.status(201).json({ ...CreateModuleResponse.parse({ id: module.id, name: module.name, subtitle: module.subtitle, subjectCount: 0, topicCount: 0, progress: 0, active: module.active }), blockId: module.blockId, displayOrder: module.displayOrder, iconUrl: resolveFileUrl(module.iconPath, { transform: THUMBNAIL_TRANSFORM }) }); // genuinely 0/0 — brand-new module has no subjects/topics yet
@@ -720,16 +727,17 @@ router.patch("/modules/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const parsed = CreateModuleBody.partial().and(z.object(ModuleTargetingFields)).safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid module" }); return; }
-  const { programTargetKind, yearTargetNumber, ...rest } = parsed.data;
+  const { programTargetKind, yearTargetNumber, courseYearIds, ...rest } = parsed.data;
   const [module] = await db.update(modulesTable).set({
     ...rest,
+    ...(courseYearIds !== undefined ? { courseYearIds: [...new Set(courseYearIds)] } : {}),
     ...(programTargetKind !== undefined ? { programTargetKind: programTargetKind ? programTargetKind.trim().toUpperCase() : null } : {}),
     ...(yearTargetNumber !== undefined ? { yearTargetNumber } : {}),
   }).where(eq(modulesTable.id, id)).returning();
   if (!module) { res.status(404).json({ error: "Module not found" }); return; }
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "MODULE_UPDATED", entity: "module", entityId: module.id });
   const moduleCounts = (await getModuleCountsBatch([module.id])).get(module.id)!;
-  res.json({ id: module.id, name: module.name, subtitle: module.subtitle, subjectCount: moduleCounts.subjectCount, topicCount: moduleCounts.topicCount, progress: 0, active: module.active, blockId: module.blockId, displayOrder: module.displayOrder, iconUrl: resolveFileUrl(module.iconPath, { transform: THUMBNAIL_TRANSFORM }), programTargetKind: module.programTargetKind, yearTargetNumber: module.yearTargetNumber, targetingLabel: describeModuleTargeting(module.programTargetKind, module.yearTargetNumber) });
+  res.json({ id: module.id, name: module.name, subtitle: module.subtitle, subjectCount: moduleCounts.subjectCount, topicCount: moduleCounts.topicCount, progress: 0, active: module.active, blockId: module.blockId, displayOrder: module.displayOrder, iconUrl: resolveFileUrl(module.iconPath, { transform: THUMBNAIL_TRANSFORM }), programTargetKind: module.programTargetKind, yearTargetNumber: module.yearTargetNumber, courseYearIds: module.courseYearIds ?? [], targetingLabel: describeModuleTargeting(module.programTargetKind, module.yearTargetNumber) });
 });
 
 router.delete("/modules/:id", requireAdmin, async (req, res): Promise<void> => {
@@ -1503,7 +1511,7 @@ router.get("/students", requireAdmin, async (req, res): Promise<void> => {
   // Bug fix: this only ever read the legacy free-text `program` column,
   // never the real programId/academicYearId a student actually registered
   // with (see auth.ts's /register — every current student has these set).
-  // That column also has no normalized program "kind" (MDCAT/BDS) or year
+  // That column also has no normalized program "kind" (MDCAT) or year
   // number on it at all, so there was no reliable way to group students by
   // year the way the MCQ bank already groups modules by
   // programTargetKind/yearTargetNumber (see contentVisibility.ts /
@@ -1582,7 +1590,7 @@ router.patch("/students/:id", requireAdmin, async (req, res): Promise<void> => {
     phone: z.string().trim().max(30).optional(),
     rollNumber: z.string().trim().max(60).optional(),
     institutionId: z.number().int().positive().optional(),
-    programKind: z.enum(["MDCAT", "BDS"]).optional(),
+    programKind: z.enum(["MDCAT"]).optional(),
     yearNumber: z.number().int().min(1).max(5).optional(),
   }).safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: parsed.success ? "Invalid request" : (parsed.error.issues[0]?.message ?? "Invalid request") }); return; }
@@ -1605,17 +1613,17 @@ router.patch("/students/:id", requireAdmin, async (req, res): Promise<void> => {
     }
   }
 
-  // College / program (MDCAT|BDS) / year: same find-or-create of the
+  // College / program (MDCAT) / year: same find-or-create of the
   // Program + AcademicYear rows that sign-up does (auth.ts /auth/register),
   // so what the admin sets here is exactly what content visibility reads.
   if (institutionId !== undefined || programKind !== undefined || yearNumber !== undefined) {
     const [currentProgram] = student.programId ? await db.select().from(programsTable).where(eq(programsTable.id, student.programId)) : [];
     const [currentYear] = student.academicYearId ? await db.select().from(academicYearsTable).where(eq(academicYearsTable.id, student.academicYearId)) : [];
     const targetInstitutionId = institutionId ?? student.institutionId ?? undefined;
-    const targetKind = (programKind ?? currentProgram?.kind) as "MDCAT" | "BDS" | undefined;
+    const targetKind = (programKind ?? currentProgram?.kind) as "MDCAT" | undefined;
     const targetYear = yearNumber ?? currentYear?.yearNumber ?? undefined;
     if (!targetInstitutionId || !targetKind || !targetYear) {
-      res.status(400).json({ error: "Choose a college, program (MDCAT/BDS) and year together — this student has no existing value to fall back on for one of them." });
+      res.status(400).json({ error: "Choose a college, program (MDCAT) and year together — this student has no existing value to fall back on for one of them." });
       return;
     }
     const maxYear = targetKind === "MDCAT" ? 5 : 4;
@@ -2009,7 +2017,7 @@ router.delete("/admin/notifications/clear-all", requireAdmin, async (req, res): 
 
 // ---------------------------------------------------------------------------
 // Admin: broadcast a notification, optionally targeted by program kind
-// (MDCAT/BDS) and/or academic year — mirrors the same targeting concept
+// (MDCAT) and/or academic year — mirrors the same targeting concept
 // used by Blocks/Modules/Exams (see getStudentTargeting in
 // contentVisibility.ts) so admins have one consistent mental model for
 // "who sees this" across content and notifications.

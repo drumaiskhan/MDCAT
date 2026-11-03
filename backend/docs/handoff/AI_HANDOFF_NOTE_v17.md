@@ -43,7 +43,7 @@ Fixed by adding `programTargetKind`/`yearTargetNumber` columns to
 Modules/Blocks already use — derived automatically from the Degree + Year
 picker at save time (see `studyYearToNumber()` in `App.tsx`; position in
 `DEGREE_YEAR_OPTIONS` is the year number, so "Final Year" lands on 5 for
-MDCAT / 4 for BDS without a lookup table to keep in sync). `GET
+MDCAT / 4 for MDCAT without a lookup table to keep in sync). `GET
 /past-papers` now filters on this in addition to the older FK trio, which
 still works for anyone who has set it up. The old programId/academicYearId
 dropdowns are kept in the form as opt-in *extra* narrowing, now clearly
@@ -82,7 +82,7 @@ I could not 100% reproduce the original symptom locally (no live
 browser), so treat this as "the conflict I found and removed," not a
 guaranteed 1:1 match to what was seen — flag it if it's still off.
 
-Flashcard **targeting** (year/MDCAT/BDS) was already correct server-side —
+Flashcard **targeting** (year/MDCAT) was already correct server-side —
 `GET /flashcards` already filters by its module's `programTargetKind`/
 `yearTargetNumber` via `getVisibleModuleIds`. A flashcard only escapes
 that if its `moduleId` is left unset when created.

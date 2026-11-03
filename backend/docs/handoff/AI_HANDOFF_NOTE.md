@@ -48,7 +48,7 @@ be a deliberate, visible action with a result an admin can see, same as
 the books link-fix button. Any *new* paper created via the Degree + Year
 picker already gets tagged correctly at save time and never needed this.
 
-## 2. Student profile not showing MDCAT/BDS or year; profile picture upload
+## 2. Student profile not showing MDCAT or year; profile picture upload
 
 **Root cause, much bigger than the profile page alone**: `/auth/register`
 correctly saves a new student's college/program/year as proper foreign
@@ -67,7 +67,7 @@ Fix, `auth.ts`:
 - `userPublicView` is now `async` and resolves `institution`/`program`/
   `academicYear` from the FK ids (falling back to the legacy text columns
   only for any pre-existing row that has them but no FK set), and adds
-  `programKind` ("MDCAT"/"BDS"), `academicYear` (label, e.g. "3rd Year"),
+  `programKind` ("MDCAT"/"MDCAT"), `academicYear` (label, e.g. "3rd Year"),
   and `yearNumber` (plain 1-5) as their own fields since the profile page
   needs the year on its own, not just folded into a display string. All 5
   call sites updated to `await` it.
@@ -126,7 +126,7 @@ the FK ids) would apply to all four.
   list only *after* an admin clicks "Fix year targeting" — before that
   click, this fix intentionally changes nothing; (b) sign up a fresh
   student, confirm their Profile page immediately shows the right
-  MDCAT/BDS + year (no backfill needed for new signups, this was a display
+  MDCAT + year (no backfill needed for new signups, this was a display
   bug not a data bug); (c) upload a profile picture, refresh, confirm it
   persists and renders; (d) confirm saving name/phone *without* touching
   the picture still works exactly as before.

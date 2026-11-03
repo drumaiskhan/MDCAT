@@ -47,8 +47,8 @@ function AdminFlashcards() {
   // themselves are still homed by subject/topic, never by block.
   const blocksQ = useQuery({ queryKey: ['admin-blocks'], queryFn: blockAdminApi.listAll });
   const blocks = (blocksQ.data ?? []).filter((b) => b.active).sort((a, b) => a.displayOrder - b.displayOrder);
-  // Program (MDCAT/BDS) + Year filter, ahead of Block — picking a program
-  // narrows Year to that program's own years (5 for MDCAT, 4 for BDS via
+  // Program (MDCAT) + Year filter, ahead of Block — picking a program
+  // narrows Year to that program's own years (MDCAT via
   // DEGREE_YEAR_OPTIONS), and narrows the Block/Module picker below to
   // just that branch, same as groupBlocksForPicker's optgroups but as an
   // explicit two-step filter instead of scanning every optgroup by hand.
@@ -240,7 +240,7 @@ function AdminFlashcards() {
       <button disabled={!targetReady || create.isPending} className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid="button-save-flashcard">{create.isPending ? 'Saving…' : 'Save flashcard'}</button>
     </form>}
     {cardsQ.isLoading ? <SkeletonPage /> : <div className="mt-2">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">{cards.length} flashcards</h3><div className="flex flex-wrap items-center gap-2"><button onClick={() => setBackupOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-flashcard-backup"><Database size={13} className={cn('transition-transform duration-300', backupOpen && 'rotate-180')} /> Backup / restore</button><div className="flex overflow-hidden rounded-xl border border-border text-xs font-bold"><button onClick={() => setBankView('tree')} className={cn('px-3 py-2', bankView === 'tree' ? 'bg-primary text-primary-foreground' : 'bg-card')} data-testid="button-flashcard-view-tree">MDCAT/BDS tree</button><button onClick={() => setBankView('flat')} className={cn('px-3 py-2', bankView === 'flat' ? 'bg-primary text-primary-foreground' : 'bg-card')} data-testid="button-flashcard-view-flat">Flat list</button></div></div></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">{cards.length} flashcards</h3><div className="flex flex-wrap items-center gap-2"><button onClick={() => setBackupOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold transition-transform active:scale-95" data-testid="button-toggle-flashcard-backup"><Database size={13} className={cn('transition-transform duration-300', backupOpen && 'rotate-180')} /> Backup / restore</button><div className="flex overflow-hidden rounded-xl border border-border text-xs font-bold"><button onClick={() => setBankView('tree')} className={cn('px-3 py-2', bankView === 'tree' ? 'bg-primary text-primary-foreground' : 'bg-card')} data-testid="button-flashcard-view-tree">MDCAT tree</button><button onClick={() => setBankView('flat')} className={cn('px-3 py-2', bankView === 'flat' ? 'bg-primary text-primary-foreground' : 'bg-card')} data-testid="button-flashcard-view-flat">Flat list</button></div></div></div>
 
       {backupOpen && <div className="mb-4 space-y-4 rounded-2xl border border-border bg-card p-5 animate-in fade-in slide-in-from-top-2 duration-300">
         <div>

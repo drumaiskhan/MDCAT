@@ -78,7 +78,7 @@ const EDITABLE_KEYS = [
   // which is unaffected either way. Also readable by students (mirrored
   // into site-content.ts) so the app can show a "trial mode is on" banner.
   "GLOBAL_TRIAL_MODE",
-  // Scopes GLOBAL_TRIAL_MODE to a specific program (MDCAT/BDS) and/or
+  // Scopes GLOBAL_TRIAL_MODE to a specific program (MDCAT) and/or
   // academic year instead of opening the whole platform. Empty string
   // (the default) on either key means "no restriction on that axis" —
   // matching the same null-means-everyone convention modules/blocks/exams
@@ -88,7 +88,7 @@ const EDITABLE_KEYS = [
   // together with GLOBAL_TRIAL_MODE by lib/trial.ts
   // (middlewares/auth.ts) — leaving both blank preserves the previous
   // "every student" behavior exactly.
-  "GLOBAL_TRIAL_PROGRAM", // "" | "MDCAT" | "BDS"
+  "GLOBAL_TRIAL_PROGRAM", // "" | "MDCAT"
   // Comma-separated academic years the trial covers ("1,2,3"; empty = every
   // year). Supersedes the old single-year GLOBAL_TRIAL_YEAR below, which is
   // kept only as a read-fallback in lib/trial.ts for sites that saved one.

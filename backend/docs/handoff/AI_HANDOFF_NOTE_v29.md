@@ -26,7 +26,7 @@ books listing, `/site-content` and the admin page all use it.
 
 Settings keys (plain strings in `platform_settings`, no migration):
 - `GLOBAL_TRIAL_MODE` "true" = on (unchanged).
-- `GLOBAL_TRIAL_PROGRAM` "" | MDCAT | BDS (unchanged).
+- `GLOBAL_TRIAL_PROGRAM` "" | MDCAT | MDCAT (unchanged).
 - `GLOBAL_TRIAL_YEARS` NEW — comma list "1,2,3", empty = every year. Legacy
   `GLOBAL_TRIAL_YEAR` is still read as a fallback when YEARS is empty; the admin
   UI writes YEARS and blanks YEAR on save.

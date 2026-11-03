@@ -71,19 +71,19 @@ all at once.
 (or only an env var) behaves exactly as before — the backup slot and extra
 env fallbacks are additive.
 
-## 2. Student registration: College showed empty after the v13 MDCAT/BDS split
+## 2. Student registration: College showed empty after the v13 MDCAT split
 
 **File:** `backend/src/routes/academic-structure.ts`
 (`GET /institutions`)
 
 Root cause: v13 added a `kind` column to `med_institutions` and made the
 registration form's College list filter by an **exact** match
-(`?kind=MDCAT` / `?kind=BDS`). Every institution that existed *before* that
+(`?kind=MDCAT` / `?kind=MDCAT`). Every institution that existed *before* that
 migration has `kind === ""` (see `ensureSchema.ts`'s backfill) until an
 admin manually re-tags it from the new "Unset" tab in Admin → Colleges &
 courses. Until that manual step happens for every legacy college, the
 public registration page's College dropdown has nothing to show for either
-program — "No MDCAT colleges are set up yet" / "No BDS colleges are set up
+program — "No MDCAT colleges are set up yet" / "No MDCAT colleges are set up
 yet" — even though the colleges are sitting right there in the database and
 in the admin panel. From a student's perspective the College field (and,
 since Year is disabled until a college's program is picked in the same
@@ -102,11 +102,11 @@ filter fix (`or(eq(kind, requested), eq(kind, ""))` instead of a bare
 
 **File:** `student/src/App.tsx` (`Register`)
 
-The Program field already used a row of tappable buttons (MDCAT/BDS); Year
+The Program field already used a row of tappable buttons (MDCAT); Year
 was a `<select>`, which is a slower, less obviously-interactive control on
 mobile for a list this short (4 or 5 options) and was visually
 inconsistent with the field right above it. Replaced the year `<select>`
-with a row of buttons — same 4 (BDS) / 5 (MDCAT) options, same selected/
+with a row of buttons — same 4 (MDCAT) / 5 (MDCAT) options, same selected/
 unselected styling as the Program buttons (`border-primary bg-[#eef7f1]`
 when selected), `data-testid="button-year-{n}"` per button. Before a
 program is picked, five disabled placeholder buttons are shown instead of
@@ -185,7 +185,7 @@ archived/removed id.
   public Register page, and that tagging one via Admin → Colleges & courses
   narrows it to just that tab going forward.
 - Registration: confirm the year buttons render 5 options for MDCAT / 4 for
-  BDS, that switching Program resets the year selection (existing
+  MDCAT, that switching Program resets the year selection (existing
   `useEffect`/`setYearNumber('')` behavior, untouched), and that submitting
   without picking a year still shows "Please select your academic year."
 - Full registration submit end-to-end — the POST body shape didn't change,

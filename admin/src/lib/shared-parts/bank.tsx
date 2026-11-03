@@ -42,6 +42,7 @@ import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiReq
 import { Badge, BrandSpinner, ConfirmDialog, DifficultyPicker, EmptyState, InlineLoading, SkeletonPage, SuggestedPathHint, cn } from './ui';
 import { STUDENT_AI_SOURCE, type McqPath } from '@/lib/api';
 import { DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, studyYearToNumber } from './groups';
+import { CourseYearPicker } from './courseYears';
 
 
 // Standalone "Subjects" settings page — same capability as
@@ -448,7 +449,7 @@ export function AnalysisStats({ rows }: { rows: AdminMcqRow[] }) {
 // (ExamManagePanel's "This exam's questions" / AdminPastPapers' "View
 // questions"). This only ever shows main-bank questions: curriculum-tagged,
 // or truly unassigned (no module AND no exam AND no past paper).
-// Groups blocks by (programTargetKind, yearTargetNumber) — MDCAT/BDS > Year >
+// Groups blocks by (programTargetKind, yearTargetNumber) — MDCAT > Year >
 // Block, the extra top level McqBankTree/FlashcardBankTree nest their
 // existing Block > Module > Subject > Topic tree under. Blocks with no
 // targeting set (the common case until an admin tags them via BlockForm)
@@ -463,7 +464,7 @@ export function groupByProgramYear<T extends { key: string | number; program: st
     const existing = buckets.get(key);
     if (existing) existing.groups.push(g); else buckets.set(key, { program, year, groups: [g] });
   }
-  const PROGRAM_ORDER = ['MDCAT', 'BDS'];
+  const PROGRAM_ORDER = ['MDCAT'];
   return [...buckets.values()]
     .sort((a, b) => {
       const ai = a.program ? PROGRAM_ORDER.indexOf(a.program) : 99; const bi = b.program ? PROGRAM_ORDER.indexOf(b.program) : 99;
@@ -501,10 +502,10 @@ export function groupBlocksForPicker(blocks: AdminBlock[], modules: AdminModule[
   return groupByProgramYear(leaves).map((g) => ({ programLabel: g.programLabel, yearLabel: g.yearLabel, blocks: g.groups.map((l) => l.block) }));
 }
 
-// Program (MDCAT/BDS) + Year filter for the Flashcards/MCQs admin content
+// Program (MDCAT) + Year filter for the Flashcards/MCQs admin content
 // pickers — narrows the Block dropdown (and therefore Module > Subject >
 // Topic beneath it) down to one program/year branch instead of making an
-// admin scan every "MDCAT · Year 3" / "BDS · Year 2" optgroup by hand.
+// admin scan every "MDCAT · Year 3" optgroup by hand.
 // Reuses the same effective-program/year resolution as groupBlocksForPicker
 // above (a block's own targeting, falling back to one of its modules').
 export function filterBlocksByProgramYear(blocks: AdminBlock[], modules: AdminModule[], program: string, yearNumber?: number): AdminBlock[] {
@@ -528,7 +529,7 @@ export function filterBlocksByProgramYear(blocks: AdminBlock[], modules: AdminMo
 
 // Program + Year selects, cascading the same way the Degree/Year picker in
 // Past papers/Exams works (DEGREE_OPTIONS -> DEGREE_YEAR_OPTIONS[program] —
-// picking MDCAT shows all 5 MDCAT years, BDS shows its 4), but for filtering
+// picking MDCAT shows its preparation year), but for filtering
 // existing academic content down to one branch rather than tagging a new
 // row. Used by AdminFlashcards/AdminMcqs above their Block/Module/Subject/
 // Topic pickers so admins can jump straight to the right program/year
@@ -536,7 +537,7 @@ export function filterBlocksByProgramYear(blocks: AdminBlock[], modules: AdminMo
 export function ProgramYearFilter({ program, studyYear, onProgramChange, onStudyYearChange, testIdPrefix }: { program: string; studyYear: string; onProgramChange: (v: string) => void; onStudyYearChange: (v: string) => void; testIdPrefix: string }) {
   return <>
     <select value={program} onChange={(e) => { onProgramChange(e.target.value); onStudyYearChange(''); }} className="h-10 rounded-xl border border-border bg-card px-3 text-xs font-semibold" data-testid={`select-${testIdPrefix}-program`}>
-      <option value="">All programs (MDCAT/BDS)</option>
+      <option value="">All programs (MDCAT)</option>
       {DEGREE_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
     </select>
     <select value={studyYear} onChange={(e) => onStudyYearChange(e.target.value)} disabled={!program} className="h-10 rounded-xl border border-border bg-card px-3 text-xs font-semibold disabled:opacity-50" data-testid={`select-${testIdPrefix}-year`}>
@@ -554,7 +555,7 @@ export function ProgramYearFilter({ program, studyYear, onProgramChange, onStudy
 // Block > Module > Subject > Topic shape and neither cares which bank the
 // resulting scope is later applied to.
 // Shown in the picker, the confirmation text and the downloaded file's label.
-export const BACKUP_PROGRAM_LABEL = { MDCAT: 'MDCAT', BDS: 'BDS', SHARED: 'Shared' } as const;
+export const BACKUP_PROGRAM_LABEL = { MDCAT: 'MDCAT', SHARED: 'Shared' } as const;
 
 export function BackupScopePicker({blocks,allModules,onChange}:{blocks:AdminBlock[];allModules:AdminModule[];onChange:(scope:BackupScope|null)=>void}){
  const [subject,setSubject]=useState('');const [topic,setTopic]=useState('');const subjects=useListSubjects();const topics=useListTopics(subject?{subjectId:Number(subject)}:undefined);
@@ -616,6 +617,7 @@ export function PastPaperEditForm({ paper, onSave, onCancel, saving, collegeOpti
   const [formDegree, setFormDegree] = useState(DEGREE_OPTIONS.includes(initialDegree as typeof DEGREE_OPTIONS[number]) ? initialDegree : '');
   const [formStudyYear, setFormStudyYear] = useState((DEGREE_YEAR_OPTIONS[initialDegree] || []).includes(initialStudyYear) ? initialStudyYear : '');
   const [formProgramId, setFormProgramId] = useState(paper.programId ? String(paper.programId) : '');
+  const [formCourseYears, setFormCourseYears] = useState<number[]>(paper.courseYearIds ?? []);
   const programsQ = useQuery({ queryKey: ['admin-programs-flat'], queryFn: () => academicApi.programs(undefined, true) });
   const academicYearsQ = useQuery({ queryKey: ['admin-academic-years-flat', formProgramId], queryFn: () => academicApi.academicYears(formProgramId ? Number(formProgramId) : undefined, true) });
   const composedLevel = [formDegree, formStudyYear].filter(Boolean).join(' - ');
@@ -629,7 +631,7 @@ export function PastPaperEditForm({ paper, onSave, onCancel, saving, collegeOpti
     onSave({
       title: String(f.get('title')), examBoard: String(f.get('examBoard') || ''), year: String(f.get('year') || ''),
       level: composedLevel || String(f.get('level') || ''), programId, academicYearId,
-      programTargetKind: formDegree || null, yearTargetNumber: studyYearToNumber(formDegree, formStudyYear) ?? null,
+      programTargetKind: formDegree || null, yearTargetNumber: studyYearToNumber(formDegree, formStudyYear) ?? null, courseYearIds: formCourseYears,
     });
   }} className="grid gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 sm:p-5 md:grid-cols-4">
     <input required name="title" defaultValue={paper.title} placeholder="Paper title, e.g. Block A" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid={`input-edit-paper-title-${paper.id}`} />
@@ -656,6 +658,7 @@ export function PastPaperEditForm({ paper, onSave, onCancel, saving, collegeOpti
         </label>
       </div>
       <p className="mt-2 text-[11px] font-semibold text-accent-text">Both are required — leaving either blank makes this paper visible to every year, which is the bug this fixes.</p>
+      <CourseYearPicker value={formCourseYears} onChange={setFormCourseYears} testIdPrefix={`edit-paper-course-year-${paper.id}`} className="mt-3" />
     </div>
 
     <select name="programId" value={formProgramId} onChange={(e) => setFormProgramId(e.target.value)} className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid={`select-edit-paper-program-${paper.id}`}><option value="">All programs (advanced targeting, optional)</option>{(programsQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
@@ -835,7 +838,7 @@ export function FlashcardTreeModule({ moduleId, name, cardCount, cardsByTopic }:
   </div>;
 }
 
-// Top level of the flashcard bank tree — one "MDCAT/BDS · Year N" group.
+// Top level of the flashcard bank tree — one "MDCAT · Year N" group.
 // Collapsed by default, exactly like McqTreeYearGroup in the MCQ bank:
 // clicking it is what rolls out the Blocks (and their nested
 // Modules/Subjects/Topics) underneath, instead of dumping every block and
@@ -884,11 +887,13 @@ export function FlashcardBankTree({ modules, blocks }: { modules: AdminModule[];
 
 export function ExamEditForm({ exam, onSave, onCancel, saving }: { exam: AdminExam; onSave: (body: Partial<AdminExam>) => void; onCancel: () => void; saving: boolean }) {
   const toLocalInput = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const [formCourseYears, setFormCourseYears] = useState<number[]>(exam.courseYearIds ?? []);
   return <form onSubmit={(e) => {
     e.preventDefault(); const f = new FormData(e.currentTarget);
     onSave({
       title: String(f.get('title')), description: String(f.get('description') || ''),
       programTargetKind: String(f.get('programTargetKind') || '') || null, yearTargetNumber: f.get('yearTargetNumber') ? Number(f.get('yearTargetNumber')) : null,
+      courseYearIds: formCourseYears,
       durationMinutes: Number(f.get('durationMinutes') || 60), startAt: new Date(String(f.get('startAt'))).toISOString(), endAt: new Date(String(f.get('endAt'))).toISOString(),
       maxAttempts: Number(f.get('maxAttempts') || 1), negativeMarkingEnabled: f.get('negativeMarkingEnabled') === 'on', negativeMarkPerWrong: Number(f.get('negativeMarkPerWrong') || 0),
       passingPercent: f.get('passingPercent') ? Number(f.get('passingPercent')) : null, resultReleaseMode: f.get('resultReleaseMode') as Exam['resultReleaseMode'],
@@ -896,7 +901,8 @@ export function ExamEditForm({ exam, onSave, onCancel, saving }: { exam: AdminEx
     });
   }} className="mt-4 space-y-3 rounded-2xl border border-primary/30 bg-primary/10 p-5">
     <div className="grid gap-3 sm:grid-cols-2"><input required name="title" defaultValue={exam.title} placeholder="Exam title" className="h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid={`input-edit-exam-title-${exam.id}`} /><input name="description" defaultValue={exam.description} placeholder="Short description" className="h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid={`input-edit-exam-description-${exam.id}`} /></div>
-    <div className="grid gap-3 sm:grid-cols-4"><select name="programTargetKind" defaultValue={exam.programTargetKind ?? ''} className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`select-edit-exam-program-${exam.id}`}><option value="">All Programs</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option></select><select name="yearTargetNumber" defaultValue={exam.yearTargetNumber ?? ''} className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`select-edit-exam-year-${exam.id}`}><option value="">All Years</option>{[1, 2, 3, 4, 5].map((y) => <option key={y} value={y}>Year {y}</option>)}</select><input required type="number" name="durationMinutes" defaultValue={exam.durationMinutes} placeholder="Duration (min)" className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-duration-${exam.id}`} /><input required type="number" name="maxAttempts" defaultValue={exam.maxAttempts} min={1} placeholder="Max attempts" className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-attempts-${exam.id}`} /></div>
+    <div className="grid gap-3 sm:grid-cols-4"><select name="programTargetKind" defaultValue={exam.programTargetKind ?? ''} className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`select-edit-exam-program-${exam.id}`}><option value="">All Programs</option><option value="MDCAT">MDCAT</option></select><select name="yearTargetNumber" defaultValue={exam.yearTargetNumber ?? ''} className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`select-edit-exam-year-${exam.id}`}><option value="">All Years</option>{[1, 2, 3, 4, 5].map((y) => <option key={y} value={y}>Year {y}</option>)}</select><input required type="number" name="durationMinutes" defaultValue={exam.durationMinutes} placeholder="Duration (min)" className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-duration-${exam.id}`} /><input required type="number" name="maxAttempts" defaultValue={exam.maxAttempts} min={1} placeholder="Max attempts" className="h-10 rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-attempts-${exam.id}`} /></div>
+    <CourseYearPicker value={formCourseYears} onChange={setFormCourseYears} testIdPrefix={`edit-exam-course-year-${exam.id}`} />
     <div className="grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-bold">Opens<input required type="datetime-local" name="startAt" defaultValue={toLocalInput(exam.startAt)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-start-${exam.id}`} /></label><label className="text-[11px] font-bold">Closes<input required type="datetime-local" name="endAt" defaultValue={toLocalInput(exam.endAt)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-end-${exam.id}`} /></label></div>
     <div className="grid gap-3 sm:grid-cols-3"><label className="text-[11px] font-bold">Passing %<input type="number" name="passingPercent" defaultValue={exam.passingPercent ?? ''} min={0} max={100} placeholder="e.g. 50" className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-passing-${exam.id}`} /></label><label className="text-[11px] font-bold">Result release<select name="resultReleaseMode" defaultValue={exam.resultReleaseMode} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-2 text-xs" data-testid={`select-edit-exam-release-${exam.id}`}><option value="immediate">Immediately after submit</option><option value="after_end">When exam window closes</option><option value="manual">Manually by admin</option></select></label><label className="text-[11px] font-bold">Negative mark / wrong<input type="number" step="0.25" name="negativeMarkPerWrong" defaultValue={exam.negativeMarkPerWrong} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-2 text-xs" data-testid={`input-edit-exam-negative-${exam.id}`} /></label></div>
     <div className="flex flex-wrap gap-4 text-xs font-bold"><label className="flex items-center gap-1.5"><input type="checkbox" name="negativeMarkingEnabled" defaultChecked={exam.negativeMarkingEnabled} className="size-4 accent-primary" data-testid={`checkbox-edit-negative-marking-${exam.id}`} /> Enable negative marking</label><label className="flex items-center gap-1.5"><input type="checkbox" name="showMarks" defaultChecked={exam.showMarks} className="size-4 accent-primary" data-testid={`checkbox-edit-show-marks-${exam.id}`} /> Show marks</label><label className="flex items-center gap-1.5"><input type="checkbox" name="showPercentage" defaultChecked={exam.showPercentage} className="size-4 accent-primary" data-testid={`checkbox-edit-show-percentage-${exam.id}`} /> Show percentage</label><label className="flex items-center gap-1.5"><input type="checkbox" name="showCorrectAnswers" defaultChecked={exam.showCorrectAnswers} className="size-4 accent-primary" data-testid={`checkbox-edit-show-answers-${exam.id}`} /> Show correct answers after release</label></div>
@@ -907,7 +913,7 @@ export function ExamEditForm({ exam, onSave, onCancel, saving }: { exam: AdminEx
 // ---------------------------------------------------------------------------
 // Paper maker — auto-builds a MDCAT mock exam's paper straight from the
 // existing curriculum MCQ bank instead of pasting IDs or uploading a file.
-// Admin picks MDCAT/BDS + Year (defaults to whatever the exam itself is
+// Admin picks MDCAT + Year (defaults to whatever the exam itself is
 // targeted at), then drills Block > Module > Subject > Topic — same tree
 // shape as McqBankTree — and sets how many MCQs to pull from each Subject
 // (optionally narrowed to specific Topics within it). "Generate paper"
@@ -1088,10 +1094,10 @@ export function PaperMakerPanel({ exam }: { exam: AdminExam }) {
       <span className="flex-1 text-xs font-extrabold">Paper maker — build this paper from the MCQ bank</span>
       <ChevronRight size={16} className={cn('shrink-0 text-primary transition-transform', open && 'rotate-90')} />
     </button>
-    {!open && <p className="mt-1 text-[11px] text-muted-foreground">Pick a year + MDCAT/BDS, choose how many MCQs to pull per subject (or set an exact count per topic), and generate the paper automatically from the existing bank.</p>}
+    {!open && <p className="mt-1 text-[11px] text-muted-foreground">Pick a year + MDCAT, choose how many MCQs to pull per subject (or set an exact count per topic), and generate the paper automatically from the existing bank.</p>}
     {open && <div className="mt-3 space-y-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="text-[11px] font-bold">Program<select value={program} onChange={(e) => setProgram(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-2 text-xs" data-testid={`select-papermaker-program-${exam.id}`}><option value="">All Programs</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option></select></label>
+        <label className="text-[11px] font-bold">Program<select value={program} onChange={(e) => setProgram(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-2 text-xs" data-testid={`select-papermaker-program-${exam.id}`}><option value="">All Programs</option><option value="MDCAT">MDCAT</option></select></label>
         <label className="text-[11px] font-bold">Year<select value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-2 text-xs" data-testid={`select-papermaker-year-${exam.id}`}><option value="">All Years</option>{[1, 2, 3, 4, 5].map((y) => <option key={y} value={y}>Year {y}</option>)}</select></label>
       </div>
       <p className="text-[11px] text-muted-foreground">Defaults to this exam's own targeting — change it to pull from a different year/program's bank if needed.</p>

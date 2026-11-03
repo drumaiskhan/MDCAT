@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, booksTable, bookPurchasesTable, usersTable, auditLogsTable } from "@workspace/db";
 import { requireAuth, requireAdmin, isAdminRole } from "../middlewares/auth";
 import { resolveFileUrl, reresolveLegacyCloudinaryPath, deleteFromCloudinary, THUMBNAIL_TRANSFORM } from "../lib/storage";
-import { getStudentTargeting, getVisibleModuleIds, isTargetVisible } from "../lib/contentVisibility";
+import { courseYearAllows, getStudentTargeting, getVisibleModuleIds, isTargetVisible } from "../lib/contentVisibility";
 import { trialGrantsAccess } from "../lib/trial";
 
 const router: IRouter = Router();
@@ -26,6 +26,7 @@ function serializeBook(row: typeof booksTable.$inferSelect, opts?: { locked?: bo
     topicId: row.topicId,
     programTargetKind: row.programTargetKind,
     yearTargetNumber: row.yearTargetNumber,
+    courseYearIds: row.courseYearIds ?? [],
     // NOTE: fall back to null, never to the raw row.storagePath — that raw
     // value is an internal "cloudinary:image/books/xyz.pdf"-style storage
     // key, not a URL. Leaking it to the client used to make the frontend
@@ -89,7 +90,7 @@ router.get("/books", requireAuth, async (req, res): Promise<void> => {
     row.programTargetKind !== null || row.yearTargetNumber !== null
       ? isTargetVisible(row.programTargetKind, row.yearTargetNumber, targeting)
       : row.moduleId === null || visibleModuleIds.includes(row.moduleId)
-  ));
+  ) && courseYearAllows(row.courseYearIds, targeting));
   res.json(visible.map((row) => {
     const locked = !row.isFree && !approvedBookIds.has(row.id) && !trialOpensBooks;
     return serializeBook(row, { locked, pending: pendingBookIds.has(row.id), secureReader: !locked });
@@ -112,6 +113,7 @@ const CreateBookBody = z.object({
   topicId: z.number().int().positive().optional(),
   programTargetKind: z.string().max(40).nullable().optional(),
   yearTargetNumber: z.number().int().min(1).max(6).nullable().optional(),
+  courseYearIds: z.array(z.number().int().positive()).max(20).optional(),
   storagePath: z.string().min(1),
   coverImagePath: z.string().min(1).optional(),
   isFree: z.boolean().optional(),
@@ -137,6 +139,7 @@ router.post("/books", requireAdmin, async (req, res): Promise<void> => {
     topicId: parsed.data.topicId ?? null,
     programTargetKind: parsed.data.programTargetKind ? parsed.data.programTargetKind.trim().toUpperCase() : null,
     yearTargetNumber: parsed.data.yearTargetNumber ?? null,
+    courseYearIds: [...new Set(parsed.data.courseYearIds ?? [])],
     storagePath,
     coverImagePath: parsed.data.coverImagePath ?? null,
     isFree: parsed.data.isFree ?? false,
@@ -156,6 +159,7 @@ const UpdateBookBody = z.object({
   author: z.string().min(1).nullable().optional(),
   programTargetKind: z.string().max(40).nullable().optional(),
   yearTargetNumber: z.number().int().min(1).max(6).nullable().optional(),
+  courseYearIds: z.array(z.number().int().positive()).max(20).optional(),
   isFree: z.boolean().optional(),
   price: z.number().nonnegative().nullable().optional(),
   currency: z.string().max(10).nullable().optional(),
@@ -170,6 +174,7 @@ router.patch("/books/:id", requireAdmin, async (req, res): Promise<void> => {
   if (parsed.data.author !== undefined) update.author = parsed.data.author;
   if (parsed.data.programTargetKind !== undefined) update.programTargetKind = parsed.data.programTargetKind ? parsed.data.programTargetKind.trim().toUpperCase() : null;
   if (parsed.data.yearTargetNumber !== undefined) update.yearTargetNumber = parsed.data.yearTargetNumber;
+  if (parsed.data.courseYearIds !== undefined) update.courseYearIds = [...new Set(parsed.data.courseYearIds)];
   if (parsed.data.isFree !== undefined) {
     update.isFree = parsed.data.isFree;
     // A free book carries no price — clear any price this book had while

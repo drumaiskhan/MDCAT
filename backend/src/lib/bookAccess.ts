@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, booksTable, bookPurchasesTable } from "@workspace/db";
 import { isAdminRole } from "../middlewares/auth";
-import { getStudentTargeting, getVisibleModuleIds, isTargetVisible } from "./contentVisibility";
+import { courseYearAllows, getStudentTargeting, getVisibleModuleIds, isTargetVisible } from "./contentVisibility";
 import { trialGrantsAccess } from "./trial";
 
 type BookRow = typeof booksTable.$inferSelect;
@@ -25,7 +25,7 @@ export async function resolveBookAccess(user: { id: number; role: string }, book
   const visible = book.programTargetKind !== null || book.yearTargetNumber !== null
     ? isTargetVisible(book.programTargetKind, book.yearTargetNumber, targeting)
     : book.moduleId === null || visibleModuleIds.includes(book.moduleId);
-  if (!visible) return { ok: false, status: 404, error: "Book not found" };
+  if (!visible || !courseYearAllows(book.courseYearIds, targeting)) return { ok: false, status: 404, error: "Book not found" };
 
   if (book.isFree) return { ok: true, book };
   const [approved] = await db.select({ id: bookPurchasesTable.id }).from(bookPurchasesTable)

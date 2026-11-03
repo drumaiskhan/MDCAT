@@ -15,7 +15,7 @@ import { BookOpen, ChevronDown, ChevronRight, ChevronUp, EyeOff, FolderTree, Gra
 import { getListModulesQueryKey } from '@/lib/api-client-react';
 import { toast } from '@/hooks/use-toast';
 import { ApiRequestError, blockAdminApi, moduleAdminApi, type AdminBlock, type AdminModule } from '@/lib/api';
-import { AddModuleForm, BlockForm, ConfirmDialog, EmptyState, ModuleRow, SectionHeader, SkeletonPage, cn, groupByProgramYear } from '@/lib/shared';
+import { AddModuleForm, BlockForm, ConfirmDialog, CourseYearBadges, EmptyState, ModuleRow, SectionHeader, SkeletonPage, cn, groupByProgramYear } from '@/lib/shared';
 import { Chip, SearchBox, StatTiles, Thumb, byOrder, planReorder } from '@/lib/admin-ui';
 import { queryClient } from '@/lib/query-client';
 
@@ -132,6 +132,7 @@ function AdminContent() {
           {b.subtitle && <div className="text-xs text-muted-foreground">{b.subtitle}</div>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+          <CourseYearBadges ids={b.courseYearIds} />
           <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">{all.length} module{all.length === 1 ? '' : 's'}</span>
           {all.length > 0 && <span className={cn('rounded-full px-2.5 py-1', published === all.length ? 'bg-primary/15 text-primary' : 'bg-accent/20 text-accent-text')}>{published}/{all.length} published</span>}
         </div>

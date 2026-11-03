@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Swords, Search, Share2, CheckCircle2, XCircle, Clock3, Trophy, ArrowLeft, X, GraduationCap, SlidersHorizontal } from 'lucide-react';
-import { authApi, blocksApi, type Block, challengesApi, ApiRequestError, type ChallengeOpponent, type ChallengeSummary } from '@/lib/api';
+import { authApi, blocksApi, courseYearsApi, type Block, challengesApi, ApiRequestError, type ChallengeOpponent, type ChallengeSummary } from '@/lib/api';
 import { getGetCurrentUserQueryKey, getListSubjectsQueryKey, getListTopicsQueryKey, useListModules, useListSubjects, useListTopics } from '@/lib/api-client-react';
 import { EmptyState, SectionHeader, SkeletonPage, Badge, cn, initials, BrandSpinner } from '@/lib/shared';
 import { toast } from '@/hooks/use-toast';
@@ -27,9 +27,9 @@ function FindFriend({ onChallenged }: { onChallenged: () => void }) {
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [topicId, setTopicId] = useState<number | undefined>();
 
-  // Only same-year, same-program (MDCAT/BDS) classmates can be challenged —
-  // enforced server-side too, but we check here first so the search box
-  // never even opens for a student whose profile isn't set up for it.
+  // Only classmates in the same FSc year can be challenged — enforced
+  // server-side too, but we check here first so the search box never even
+  // opens for a student whose FSc year isn't set.
   const me = useQuery({ queryKey: getGetCurrentUserQueryKey(), queryFn: authApi.me });
 
   const blocksQ = useQuery({ queryKey: ['blocks'], queryFn: blocksApi.list });
@@ -57,20 +57,21 @@ function FindFriend({ onChallenged }: { onChallenged: () => void }) {
     onError: (err: unknown) => toast({ title: 'Could not send challenge', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
   });
 
-  const missingProfile = !me.isLoading && (!me.data?.programKind || me.data?.yearNumber == null);
+  const courseYearsQ = useQuery({ queryKey: ['course-years'], queryFn: courseYearsApi.list });
+  const missingProfile = !me.isLoading && !courseYearsQ.isLoading && (courseYearsQ.data ?? []).length > 0 && me.data?.courseYearId == null;
 
-  if (me.isLoading) return <div className="rounded-3xl border border-border bg-card p-6"><BrandSpinner size={16} /></div>;
+  if (me.isLoading || courseYearsQ.isLoading) return <div className="rounded-3xl border border-border bg-card p-6"><BrandSpinner size={16} /></div>;
 
   if (missingProfile) {
     return <div className="rounded-3xl border border-border bg-card p-6">
       <p className="text-sm font-extrabold">Find a friend</p>
-      <EmptyState icon={GraduationCap} title="Complete your profile first" body="Your program (MDCAT/BDS) and academic year need to be set before you can find and challenge classmates." action={<Link href="/profile" className="text-xs font-bold text-primary underline" data-testid="link-complete-profile">Go to profile</Link>} />
+      <EmptyState icon={GraduationCap} title="Complete your profile first" body="Your FSc year needs to be set before you can find and challenge classmates." action={<Link href="/profile" className="text-xs font-bold text-primary underline" data-testid="link-complete-profile">Go to profile</Link>} />
     </div>;
   }
 
   return <div className="rounded-3xl border border-border bg-card p-6">
     <p className="text-sm font-extrabold">Find a friend</p>
-    <p className="mt-1 text-[11px] text-muted-foreground">Search by name, email, phone, or roll number — only {me.data?.programKind}{me.data?.academicYear ? ` · ${me.data.academicYear}` : ''} classmates show up.</p>
+    <p className="mt-1 text-[11px] text-muted-foreground">Search by name, email, phone, or roll number — only {me.data?.courseYear ? `${me.data.courseYear} ` : ''}classmates show up.</p>
     <div className="relative mt-4">
       <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ayesha, roll number, or email" className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" data-testid="input-friend-search" />
@@ -78,7 +79,7 @@ function FindFriend({ onChallenged }: { onChallenged: () => void }) {
 
     {query.trim().length >= 2 && <div className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
       {search.isLoading && <p className="py-3 text-center text-xs text-muted-foreground">Searching…</p>}
-      {!search.isLoading && (search.data || []).length === 0 && <p className="py-3 text-center text-xs text-muted-foreground">No classmates found in your program &amp; year.</p>}
+      {!search.isLoading && (search.data || []).length === 0 && <p className="py-3 text-center text-xs text-muted-foreground">No classmates found in your FSc year.</p>}
       {(search.data || []).map((s) => <button key={s.id} onClick={() => setSelected(s)} className={cn('flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', selected?.id === s.id ? 'border-primary bg-[#eef7f1]' : 'border-border hover:bg-muted')} data-testid={`button-select-friend-${s.id}`}>
         <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[#d7eee4] text-[11px] font-extrabold text-[#287058]">{initials(s.name)}</div>
         <div className="min-w-0 flex-1"><div className="truncate text-xs font-bold">{s.name}</div><div className="truncate text-[10px] text-muted-foreground">{s.email}{s.institution ? ` · ${s.institution}` : ''}</div></div>

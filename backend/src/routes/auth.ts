@@ -64,7 +64,7 @@ const MAX_OTP_ATTEMPTS = 5;
 // proper FK trio. Every student who signed up through the current
 // registration flow therefore had a blank Institution/Programme on their
 // profile page (and in every other place that read those same two
-// columns), even though they'd picked a real college, MDCAT/BDS, and year
+// columns), even though they'd picked a real college, MDCAT, and year
 // at signup. Now resolves the real names from the FKs, with the legacy
 // text columns kept only as a fallback for any pre-existing row that has
 // them but no FK set. Also now includes the student's academic year
@@ -218,7 +218,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const YEAR_NUMBER = 1;
 
   // Find-or-create the underlying Program/AcademicYear rows for this
-  // college + MDCAT/BDS + year. Content visibility is driven by
+  // college + MDCAT + year. Content visibility is driven by
   // program.kind + academicYear.yearNumber (not these row IDs), so
   // provisioning them here — rather than requiring an admin to pre-create
   // every college's programs/years — keeps signup to just "pick your

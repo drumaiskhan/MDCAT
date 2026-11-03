@@ -724,6 +724,11 @@ CREATE TABLE IF NOT EXISTS med_course_years (
 );
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
 ALTER TABLE med_users ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
+ALTER TABLE med_blocks ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_books ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_past_papers ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_exams ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
 
 ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS block_id INTEGER;
 -- Round 3, item 7: optional module thumbnail (see schema/medschool.ts).

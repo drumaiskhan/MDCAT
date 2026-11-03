@@ -22,22 +22,20 @@ async function wipe() {
 const q = (question: string, extra: Record<string, unknown> = {}) => ({ question, options: ["a", "b", "c"], correctAnswer: "a", ...extra }) as typeof mcqsTable.$inferInsert;
 
 async function seed() {
-  const [bA_m1, bA_b1, bB_m2] = await db.insert(blocksTable).values([
+  const [bA_m1, bB_m2] = await db.insert(blocksTable).values([
     { name: "Block A", programTargetKind: "MDCAT", yearTargetNumber: 1 },
-    { name: "Block A", programTargetKind: "BDS", yearTargetNumber: 1 },
     { name: "Block B", programTargetKind: "MDCAT", yearTargetNumber: 2 },
   ]).returning();
-  const [modAnat, modBdsAnat, modY2, modShared] = await db.insert(modulesTable).values([
+  const [modAnat, modY2, modShared] = await db.insert(modulesTable).values([
     { name: "Anatomy", subtitle: "", blockId: bA_m1!.id },
-    { name: "Anatomy", subtitle: "", blockId: bA_b1!.id },
     { name: "Physiology", subtitle: "", blockId: bB_m2!.id },
     { name: "Ethics", subtitle: "", blockId: null },            // shared, no block, no targeting
   ]).returning();
-  const [sHead, sBds, sY2] = await db.insert(subjectsTable).values([
-    { moduleId: modAnat!.id, name: "Head" }, { moduleId: modBdsAnat!.id, name: "Head" }, { moduleId: modY2!.id, name: "Nerve" },
+  const [sHead, sY2] = await db.insert(subjectsTable).values([
+    { moduleId: modAnat!.id, name: "Head" }, { moduleId: modY2!.id, name: "Nerve" },
   ]).returning();
-  const [tSkull, tEmpty, tBds, tY2] = await db.insert(topicsTable).values([
-    { subjectId: sHead!.id, name: "Skull" }, { subjectId: sHead!.id, name: "EmptyTopic" }, { subjectId: sBds!.id, name: "Teeth" }, { subjectId: sY2!.id, name: "Action potential" },
+  const [tSkull, tEmpty, tY2] = await db.insert(topicsTable).values([
+    { subjectId: sHead!.id, name: "Skull" }, { subjectId: sHead!.id, name: "EmptyTopic" }, { subjectId: sY2!.id, name: "Action potential" },
   ]).returning();
   const [paper, paperY2] = await db.insert(pastPapersTable).values([
     { title: "KMU 2024", examBoard: "KMU", year: "2024", level: "1st Year MDCAT", programTargetKind: "MDCAT", yearTargetNumber: 1 },
@@ -49,13 +47,12 @@ async function seed() {
   const mcqs = await db.insert(mcqsTable).values([
     q("Which bone is the skull base?", { moduleId: modAnat!.id, subjectId: sHead!.id, topicId: tSkull!.id }),
     q("Direct module-only question", { moduleId: modAnat!.id }),
-    q("BDS tooth question", { moduleId: modBdsAnat!.id, subjectId: sBds!.id, topicId: tBds!.id }),
     q("Y2 AP question", { moduleId: modY2!.id, subjectId: sY2!.id, topicId: tY2!.id }),
     q("Past paper Q (no module)", { pastPaperId: paper!.id }),
     q("Past paper Y2 Q", { pastPaperId: paperY2!.id }),
     q("Exam question", { examId: exam!.id }),
   ]).returning();
-  await db.insert(examQuestionsTable).values([{ examId: exam!.id, mcqId: mcqs[6]!.id, displayOrder: 1 }]);
+  await db.insert(examQuestionsTable).values([{ examId: exam!.id, mcqId: mcqs[5]!.id, displayOrder: 1 }]);
   return { mcqs };
 }
 
@@ -66,31 +63,29 @@ async function main() {
   console.log("seeded", await counts());
 
   // ---------- 1. export scoping: MDCAT year 1 ----------
-  const mbbs1 = await buildMcqBackup({ level: "year", id: 1, label: "MDCAT · Year 1", program: "MDCAT" });
+  const mdcatY1 = await buildMcqBackup({ level: "year", id: 1, label: "MDCAT · Year 1", program: "MDCAT" });
   const names = (xs: { name?: string; title?: string }[]) => xs.map((x) => x.name ?? x.title).sort();
-  console.log("MDCAT Y1 questions:", mbbs1.mcqs.map((m) => m.question).sort());
-  assert.deepEqual(mbbs1.mcqs.map((m) => m.question).sort(), ["Direct module-only question", "Exam question", "Past paper Q (no module)", "Which bone is the skull base?"]);
-  assert.deepEqual(names(mbbs1.structure!.blocks), ["Block A"]);                         // not BDS Block A, not Block B
-  assert.equal(mbbs1.structure!.blocks.length, 1);
-  assert.deepEqual(names(mbbs1.structure!.modules), ["Anatomy"]);
-  assert.deepEqual(names(mbbs1.structure!.topics), ["EmptyTopic", "Skull"]);              // empty topic kept = whole structure
-  assert.deepEqual(names(mbbs1.structure!.pastPapers), ["KMU 2024"]);
-  assert.deepEqual(names(mbbs1.structure!.exams), ["Pre-prof Y1"]);
-  assert.equal(mbbs1.structure!.examQuestions.length, 1);
-  assert.equal(mbbs1.coverage!.moduleIds.length, 1);
+  console.log("MDCAT Y1 questions:", mdcatY1.mcqs.map((m) => m.question).sort());
+  assert.deepEqual(mdcatY1.mcqs.map((m) => m.question).sort(), ["Direct module-only question", "Exam question", "Past paper Q (no module)", "Which bone is the skull base?"]);
+  assert.deepEqual(names(mdcatY1.structure!.blocks), ["Block A"]);                         // not Block B
+  assert.equal(mdcatY1.structure!.blocks.length, 1);
+  assert.deepEqual(names(mdcatY1.structure!.modules), ["Anatomy"]);
+  assert.deepEqual(names(mdcatY1.structure!.topics), ["EmptyTopic", "Skull"]);              // empty topic kept = whole structure
+  assert.deepEqual(names(mdcatY1.structure!.pastPapers), ["KMU 2024"]);
+  assert.deepEqual(names(mdcatY1.structure!.exams), ["Pre-prof Y1"]);
+  assert.equal(mdcatY1.structure!.examQuestions.length, 1);
+  assert.equal(mdcatY1.coverage!.moduleIds.length, 1);
 
-  const bds1 = await buildMcqBackup({ level: "year", id: 1, label: "BDS · Year 1", program: "BDS" });
-  assert.deepEqual(bds1.mcqs.map((m) => m.question), ["BDS tooth question"]);
-  const anyY1 = await buildMcqBackup({ level: "year", id: 1, label: "Year 1" });         // no program filter = both
-  assert.equal(anyY1.mcqs.length, 5);
+  const anyY1 = await buildMcqBackup({ level: "year", id: 1, label: "Year 1" });         // no program filter
+  assert.equal(anyY1.mcqs.length, 4);
   const shared = await buildMcqBackup({ level: "program", id: 0, label: "Shared", program: "SHARED" });
   assert.deepEqual(names(shared.structure!.modules), ["Ethics"]);
-  const allMbbs = await buildMcqBackup({ level: "program", id: 0, label: "MDCAT", program: "MDCAT" });
-  assert.equal(allMbbs.mcqs.length, 6);                                                  // all MDCAT: Y1(4)+Y2(AP + paper Y2)
+  const allMdcat = await buildMcqBackup({ level: "program", id: 0, label: "MDCAT", program: "MDCAT" });
+  assert.equal(allMdcat.mcqs.length, 6);                                                  // all MDCAT: Y1(4)+Y2(AP + paper Y2)
   console.log("export scoping OK");
 
   // ---------- 2. JSON round trip + schema ----------
-  const file1 = McqBackupFileSchema.parse(JSON.parse(JSON.stringify(mbbs1)));
+  const file1 = McqBackupFileSchema.parse(JSON.parse(JSON.stringify(mdcatY1)));
 
   // ---------- 3. restore into the SAME db: merge must be a no-op ----------
   const before = await counts();
@@ -111,9 +106,9 @@ async function main() {
   // ---------- 5. replace wipes only the scope, then restores ----------
   const replaced = await restoreMcqBackupWithStructure(file1, "replace");
   assert.equal(replaced.deletedFirst, 8);                                                // 4 original + 4 appended copies, all MDCAT Y1
-  const c5 = await counts(); assert.equal(c5.mcqs, before.mcqs);                         // others (BDS, Y2, Y2 paper) untouched
+  const c5 = await counts(); assert.equal(c5.mcqs, before.mcqs);                         // others (Y2, Y2 paper) untouched
   const survivors = (await db.select().from(mcqsTable)).map((m) => m.question);
-  assert.ok(survivors.includes("BDS tooth question") && survivors.includes("Y2 AP question") && survivors.includes("Past paper Y2 Q"));
+  assert.ok(survivors.includes("Y2 AP question") && survivors.includes("Past paper Y2 Q"));
   const examLink = await db.select().from(examQuestionsTable); assert.equal(examLink.length, 1);
   console.log("append / replace OK");
 

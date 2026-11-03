@@ -45,7 +45,7 @@ import { Badge, ConfirmDialog, EmptyState, Progress, SectionHeader, SkeletonPage
 import { queryClient } from '@/lib/query-client';
 
 // Mirrors McqTreeYearGroup (shared.tsx) — one collapsed-by-default
-// "MDCAT/BDS · Year N" section, so the roster reads the same way the MCQ
+// "MDCAT · Year N" section, so the roster reads the same way the MCQ
 // bank does instead of one long flat list/table. Students with no
 // programId/academicYearId on record (legacy rows, or admin-created
 // accounts) land under "Unspecified program" / "All years" via the same

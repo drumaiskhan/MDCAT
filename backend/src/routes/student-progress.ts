@@ -427,14 +427,14 @@ router.get("/student/search", requireAuth, async (req, res): Promise<void> => {
       .innerJoin(modulesTable, eq(subjectsTable.moduleId, modulesTable.id))
       .where(and(eq(topicsTable.active, true), eq(topicsTable.archived, false), eq(subjectsTable.active, true), eq(subjectsTable.archived, false), eq(modulesTable.active, true), eq(modulesTable.archived, false), ilike(topicsTable.name, like), modulesScope))
       .limit(SEARCH_LIMIT),
-    db.select({ id: examsTable.id, title: examsTable.title, programTargetKind: examsTable.programTargetKind, yearTargetNumber: examsTable.yearTargetNumber }).from(examsTable)
+    db.select({ id: examsTable.id, title: examsTable.title, programTargetKind: examsTable.programTargetKind, yearTargetNumber: examsTable.yearTargetNumber, courseYearIds: examsTable.courseYearIds }).from(examsTable)
       .where(and(eq(examsTable.status, "published"), ilike(examsTable.title, like))).limit(SEARCH_OVERFETCH),
-    db.select({ id: pastPapersTable.id, title: pastPapersTable.title, programTargetKind: pastPapersTable.programTargetKind, yearTargetNumber: pastPapersTable.yearTargetNumber }).from(pastPapersTable)
+    db.select({ id: pastPapersTable.id, title: pastPapersTable.title, programTargetKind: pastPapersTable.programTargetKind, yearTargetNumber: pastPapersTable.yearTargetNumber, courseYearIds: pastPapersTable.courseYearIds }).from(pastPapersTable)
       .where(and(eq(pastPapersTable.active, true), eq(pastPapersTable.archived, false), ilike(pastPapersTable.title, like))).limit(SEARCH_OVERFETCH),
   ]);
 
-  const visible = <T extends { programTargetKind: string | null; yearTargetNumber: number | null }>(rows: T[]) =>
-    (admin ? rows : rows.filter((r) => isTargetVisible(r.programTargetKind, r.yearTargetNumber, targeting))).slice(0, SEARCH_LIMIT);
+  const visible = <T extends { programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds?: number[] | null }>(rows: T[]) =>
+    (admin ? rows : rows.filter((r) => isTargetVisible(r.programTargetKind, r.yearTargetNumber, targeting, r.courseYearIds))).slice(0, SEARCH_LIMIT);
 
   res.json({
     blocks: blocks.map<SearchHit>((b) => ({ id: b.id, title: b.name, subtitle: b.subtitle || undefined })),

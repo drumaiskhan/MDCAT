@@ -9,7 +9,7 @@ import { BackupScopePicker, ConfirmDialog, cn } from '@/lib/shared';
 // a list of questions: it carries the Block > Module > Subject > Topic tree the
 // questions live in (plus past papers and exams), the same idea as the Database
 // backup page, but narrowed to what you pick — the whole bank, one program
-// (MDCAT / BDS), one year of a program, or any single branch. Importing rebuilds
+// (MDCAT), one year of a program, or any single branch. Importing rebuilds
 // whatever structure is missing and puts the questions back into it.
 
 const MODES: Array<{ value: McqRestoreMode; label: string; hint: string }> = [

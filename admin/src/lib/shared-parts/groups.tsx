@@ -44,13 +44,12 @@ export const DEGREE_OPTIONS = ['MDCAT'] as const;
 
 export const DEGREE_YEAR_OPTIONS: Record<string, string[]> = {
   MDCAT: ['MDCAT Preparation'],
-  BDS: ['1st Year', '2nd Year', '3rd Year', 'Final Year'],
 };
 
 // Turns the Degree + Year picker's own selection straight into the
 // programTargetKind/yearTargetNumber pair that actually gates visibility
 // (see pastPapersTable's comment) — position within DEGREE_YEAR_OPTIONS is
-// the year number, so "Final Year" lands on 5 for MDCAT and 4 for BDS
+// the year number, so "MDCAT Preparation" lands on 1
 // without needing a separate lookup table to keep in sync.
 
 export function studyYearToNumber(degree: string, studyYear: string): number | undefined {
@@ -59,10 +58,10 @@ export function studyYearToNumber(degree: string, studyYear: string): number | u
 }
 
 // Shared classifier for Past papers and MDCAT mock exams: buckets a flat
-// list into MDCAT / BDS (whatever a getDegree() callback resolves, falling
+// list into MDCAT (whatever a getDegree() callback resolves, falling
 // back to "Unspecified" for legacy/untyped rows) and then, inside each of
 // those, by whatever getYear() resolves — calendar year for past papers,
-// study year for exams. Keeps MDCAT before BDS before anything unset, and
+// study year for exams. Keeps MDCAT before anything unset, and
 // sorts years newest-first within a degree so the page reads as organized
 // sections instead of one long flat list.
 //
@@ -75,7 +74,7 @@ export function studyYearToNumber(degree: string, studyYear: string): number | u
 // original newest-first string sort (past papers' calendar-year grouping,
 // and exams' existing behavior — both unaffected by this addition).
 export function groupByDegreeYear<T>(items: T[], getDegree: (item: T) => string, getYear: (item: T) => string, getYearSortKey?: (item: T) => number | undefined) {
-  const DEGREE_ORDER = ['MDCAT', 'BDS'];
+  const DEGREE_ORDER = ['MDCAT'];
   const byDegree = new Map<string, T[]>();
   for (const item of items) {
     const d = getDegree(item) || '';

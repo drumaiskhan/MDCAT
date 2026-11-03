@@ -183,8 +183,8 @@ function AdminMcqs() {
   // tree's grouping) need to filter/group by.
   const modulesQ = useQuery({ queryKey: ['admin-modules'], queryFn: moduleAdminApi.listAll });
   const allModules = modulesQ.data ?? [];
-  // Program (MDCAT/BDS) + Year filter, ahead of Block — picking a program
-  // narrows Year to that program's own years (5 for MDCAT, 4 for BDS via
+  // Program (MDCAT) + Year filter, ahead of Block — picking a program
+  // narrows Year to that program's own years (MDCAT via
   // DEGREE_YEAR_OPTIONS), and narrows the Block/Module picker below to
   // just that branch, same as groupBlocksForPicker's optgroups but as an
   // explicit two-step filter instead of scanning every optgroup by hand.

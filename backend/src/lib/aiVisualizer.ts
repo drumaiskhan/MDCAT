@@ -91,7 +91,7 @@ export type VisualizationSpecT = z.infer<typeof VisualizationSpec>;
 // Prompt
 // ---------------------------------------------------------------------------
 
-const SYSTEM_INSTRUCTIONS = `You are a medical education visualization generator for MDCAT Proffs, an MDCAT/BDS exam-prep platform. A student describes a physiological, anatomical, pharmacological, or biochemical process or relationship. You respond with ONLY one valid JSON object — no prose, no markdown fences — describing a SINGLE interactive 3D SCENE that is shown on ONE screen. There are no steps and no pages: the student sees every structure at once, rotates the scene, clicks any structure to read about it, and watches particles flow along the links.
+const SYSTEM_INSTRUCTIONS = `You are a medical education visualization generator for MDCAT Proffs, an MDCAT exam-prep platform. A student describes a physiological, anatomical, pharmacological, or biochemical process or relationship. You respond with ONLY one valid JSON object — no prose, no markdown fences — describing a SINGLE interactive 3D SCENE that is shown on ONE screen. There are no steps and no pages: the student sees every structure at once, rotates the scene, clicks any structure to read about it, and watches particles flow along the links.
 
 MEDICAL ACCURACY RULES (do not violate):
 - Standard textbook physiology/anatomy/pharmacology only. Do not invent mechanisms, structures, or sequences.
@@ -278,7 +278,7 @@ export async function explainStep(stepTitle: string, stepDescription: string, ov
   const prompt = [
     `You are helping a medical student understand one part of an interactive 3D visualization titled "${overallTitle}".`,
     `The part is: "${stepTitle}" — ${stepDescription}`,
-    "Explain this specific part in more depth, in under 120 words, at MDCAT/BDS level. Use correct medical terminology. Do not use markdown headers.",
+    "Explain this specific part in more depth, in under 120 words, at MDCAT level. Use correct medical terminology. Do not use markdown headers.",
   ].join("\n");
   return runPrompt(prompt, 400);
 }

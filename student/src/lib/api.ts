@@ -137,13 +137,15 @@ export interface AuthUser {
   id: number; name: string; email: string; role: string; status: string; emailVerified: boolean;
   institution: string | null; program: string | null;
   // Resolved from institutionId/programId/academicYearId server-side (see
-  // userPublicView in auth.ts) — programKind is "MDCAT"/"BDS", academicYear
+  // userPublicView in auth.ts) — programKind is "MDCAT", academicYear
   // is the display label (e.g. "3rd Year"), yearNumber is its plain 1-5
   // number. `institution`/`program` above are also now resolved names, not
   // the old blank legacy text columns; these three are additionally broken
   // out since the page needs the year on its own.
   programKind: string | null; academicYear: string | null; yearNumber: number | null;
   institutionId: number | null; programId: number | null; academicYearId: number | null; batchId: number | null;
+  // FSc year (FSc-I / FSc-II ...) picked at signup.
+  courseYearId?: number | null; courseYear?: string | null;
   rollNumber: string | null; phone: string | null;
   profilePicturePath: string | null; profilePictureUrl: string | null;
 }
@@ -886,11 +888,11 @@ export const aiVisualizerApi = {
     return request<VisualizerCatalogPage>(`/ai/visualizer/catalog${qs.toString() ? `?${qs.toString()}` : ''}`);
   },
 };
-export interface VisualizerCatalogParams { q?: string; discipline?: string; group?: string; program?: 'MDCAT' | 'BDS'; saved?: 'true' | 'false'; limit?: number; offset?: number }
+export interface VisualizerCatalogParams { q?: string; discipline?: string; group?: string; program?: 'MDCAT'; saved?: 'true' | 'false'; limit?: number; offset?: number }
 export interface VisualizerCatalogTopic { id: string; prompt: string; disciplineId: string; discipline: string; group: string; entity: string; aspect: string; saved: boolean }
 export interface VisualizerCatalogPage {
   total: number; totalAll: number; offset: number; limit: number; topics: VisualizerCatalogTopic[];
-  disciplines: Array<{ id: string; name: string; program: 'MDCAT' | 'BDS' | 'Both'; count: number; groups: Array<{ name: string; count: number }> }>;
+  disciplines: Array<{ id: string; name: string; program: 'MDCAT' | 'Both'; count: number; groups: Array<{ name: string; count: number }> }>;
 }
 
 export type AiMcqDifficulty = 'easy' | 'moderate' | 'hard' | 'mixed';

@@ -160,4 +160,11 @@ ALTER TABLE med_topics ADD COLUMN IF NOT EXISTS chapter_id INTEGER;
 CREATE INDEX IF NOT EXISTS med_topics_chapter_idx ON med_topics (chapter_id);
 CREATE INDEX IF NOT EXISTS med_chapters_subject_idx ON med_chapters (subject_id);
 
+-- FSc course years on learning content
+ALTER TABLE med_blocks ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_books ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_past_papers ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_exams ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+
 COMMIT;

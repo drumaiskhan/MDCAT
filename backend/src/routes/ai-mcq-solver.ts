@@ -50,7 +50,7 @@ function parseSolved(raw: string, n: number): Solved | null {
 
 function buildPrompt(question: string, options: string[]): string {
   const opts = options.map((o, i) => `${LETTERS[i]}. ${o}`).join("\n");
-  return `You are an expert medical educator helping an MDCAT/BDS student who is unsure about a multiple-choice question (single best answer). Work out the answer carefully from standard medical textbooks (e.g. Guyton, Robbins, Gray's, Bailey & Love, Davidson, Kumar & Clark, Katzung), then explain it clearly.
+  return `You are an expert medical educator helping an MDCAT student who is unsure about a multiple-choice question (single best answer). Work out the answer carefully from standard medical textbooks (e.g. Guyton, Robbins, Gray's, Bailey & Love, Davidson, Kumar & Clark, Katzung), then explain it clearly.
 
 Question:
 ${question}
@@ -195,7 +195,7 @@ function buildFollowUpPrompt(b: z.infer<typeof FollowUpBody>): string {
   const opts = b.options.map((o, i) => `${LETTERS[i]}. ${o}`).join("\n");
   const chat = b.history.map((h) => `${h.role === "student" ? "Student" : "Tutor"}: ${h.text}`).join("\n");
   const ai = LETTERS.indexOf(b.answer);
-  return `You are a friendly, accurate medical tutor talking with an MDCAT/BDS student about one MCQ you already answered. Answer their follow-up directly and clearly, in plain text (no markdown headings, no JSON), in under 180 words unless they ask for more detail. Use simple language, and a short example or mnemonic when it helps.
+  return `You are a friendly, accurate medical tutor talking with an MDCAT student about one MCQ you already answered. Answer their follow-up directly and clearly, in plain text (no markdown headings, no JSON), in under 180 words unless they ask for more detail. Use simple language, and a short example or mnemonic when it helps.
 If they disagree with your earlier answer, reconsider honestly: if you were wrong, say so plainly and give the corrected answer; if you were right, explain why politely. If something is uncertain or varies between guidelines/regions, say so. Stay on medical study topics.
 
 MCQ:

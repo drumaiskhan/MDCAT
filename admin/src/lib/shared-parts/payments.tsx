@@ -59,7 +59,7 @@ export function PaymentProofsTab() {
   const doReject = (p: Payment) => { if (!reason.trim()) return; reject.mutate({ id: p.id, data: { reason: reason.trim() } }, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() }); setRejectingId(null); setReason(''); } }); };
   const isImage = (url: string) => /\.(png|jpe?g|webp)$/i.test(url);
 
-  // Grouped by Program (MDCAT/BDS) then Academic year, the same
+  // Grouped by Program (MDCAT) then Academic year, the same
   // groupByDegreeYear + CollapsibleGroup pattern Books/Past papers/Exams
   // use — a submission with no program or year on file falls into
   // "Unspecified degree" / "No year set", same convention those pages use.
@@ -77,8 +77,8 @@ export function PaymentProofsTab() {
   </div>;
 
   return <div><div className="mb-4 flex justify-end"><div className="flex rounded-xl border border-border bg-card p-1">{FILTERS.map((f) => <button key={f.key} onClick={() => setFilter(f.key)} className={cn('rounded-lg px-3 py-1.5 text-[11px] font-bold capitalize', filter === f.key && 'bg-muted text-primary')} data-testid={`button-payment-filter-${f.label}`}>{f.label}</button>)}</div></div>
-    {q.isLoading ? <SkeletonPage /> : payments.length ? groups.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' || g.degree === 'BDS' ? `${g.degree} colleges` : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`payments-degree-${g.degree || 'unspecified'}`}>
-      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen={pendingCount(yg.items) > 0} title={yg.year ? [yg.year, (g.degree === 'MDCAT' || g.degree === 'BDS') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`payments-year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
+    {q.isLoading ? <SkeletonPage /> : payments.length ? groups.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' ? 'MDCAT' : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`payments-degree-${g.degree || 'unspecified'}`}>
+      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen={pendingCount(yg.items) > 0} title={yg.year ? [yg.year, (g.degree === 'MDCAT') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`payments-year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
         <div className="space-y-3">{yg.items.map(renderCard)}</div>
       </CollapsibleGroup>)}
     </CollapsibleGroup>) : <EmptyState icon={ReceiptText} title="Queue is clear" body="No payment submissions match this filter." />}

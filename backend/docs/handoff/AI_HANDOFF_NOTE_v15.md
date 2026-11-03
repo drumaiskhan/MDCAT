@@ -7,14 +7,14 @@ test could be run. Every edited `.tsx` file was checked with a standalone
 — that passed clean on both `App.tsx` files below. **Run `pnpm typecheck`
 and `pnpm dev` (both frontends) before trusting this in prod.**
 
-## 1. Past papers & MDCAT Mock Exams classified into MDCAT/BDS → year
+## 1. Past papers & MDCAT Mock Exams classified into MDCAT → year
 **File:** `admin/src/App.tsx`
 - New shared helper `groupByDegreeYear()` buckets a flat list into
-  MDCAT/BDS (falling back to "Unspecified"/"All Programs" for untyped rows)
+  MDCAT (falling back to "Unspecified"/"All Programs" for untyped rows)
   and then by year, sorted newest-first.
 - `AdminPastPapers`: degree comes off the existing `level` field's
   "Degree - Year" prefix (e.g. "MDCAT - 1st Year" → "MDCAT"); year is the
-  paper's own `year` field. Rendered as MDCAT/BDS section headers, each
+  paper's own `year` field. Rendered as MDCAT section headers, each
   with year sub-headers, instead of one flat list.
 - `AdminExams`: degree is `programTargetKind`, year is
   `yearTargetNumber` (already-existing fields — this only changes how the
@@ -75,11 +75,11 @@ and `pnpm dev` (both frontends) before trusting this in prod.**
 - `student/index.html`
 
 ## Suggested smoke-test before deploy
-- Admin → Past papers: confirm papers now show under MDCAT/BDS/Unspecified
+- Admin → Past papers: confirm papers now show under MDCAT/Unspecified
   section headers with year sub-headers; add a paper, then Edit an
   existing one and confirm every field (title, college, year, degree/year,
   program/academic-year targeting) saves correctly.
-- Admin → MDCAT Mock Exams: confirm the same MDCAT/BDS/year grouping shows
+- Admin → MDCAT Mock Exams: confirm the same MDCAT/year grouping shows
   above the existing exam cards; existing Edit/Manage/Archive/Delete
   buttons still work per exam.
 - Student → Past Papers: confirm every card's bold heading is the paper's

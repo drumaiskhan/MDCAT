@@ -1,6 +1,6 @@
 // AI Visualizer topic catalog (v83).
 //
-// A curated, browsable map of medical-school topics (MDCAT + BDS) that students can pick from, and
+// A curated, browsable map of MDCAT topics that students can pick from, and
 // that admins use to see which topics already have a saved widget. Every catalog topic is a normal
 // visualizer prompt: the first student to open it generates the widget, it is saved to the widget
 // library under the usual normalised key, and everyone after gets it instantly with no AI call.
@@ -11,8 +11,8 @@
 import { promptKey } from "./promptKey";
 
 export interface CatalogGroup { name: string; entities: string[] }
-export interface CatalogDiscipline { id: string; name: string; program: "MDCAT" | "BDS" | "Both"; aspects: string[]; groups: CatalogGroup[] }
-export interface CatalogTopic { id: string; disciplineId: string; discipline: string; program: "MDCAT" | "BDS" | "Both"; group: string; entity: string; aspect: string; prompt: string; key: string }
+export interface CatalogDiscipline { id: string; name: string; program: "MDCAT" | "Both"; aspects: string[]; groups: CatalogGroup[] }
+export interface CatalogTopic { id: string; disciplineId: string; discipline: string; program: "MDCAT" | "Both"; group: string; entity: string; aspect: string; prompt: string; key: string }
 
 // Entities are written as one "; "-separated string per group to keep this file readable.
 const g = (name: string, list: string): CatalogGroup => ({ name, entities: list.split(";").map((s) => s.trim()).filter(Boolean) });
@@ -206,64 +206,6 @@ export const CATALOG_DISCIPLINES: CatalogDiscipline[] = [
     groups: [
       g("Epidemiology and biostatistics", "Study designs; Cohort studies; Case-control studies; Randomised controlled trials; Screening tests; Sensitivity and specificity; Bias and confounding; Measures of disease frequency; Normal distribution; Hypothesis testing; Sampling methods; Confidence intervals; Correlation and regression; Surveillance systems; Outbreak investigation; Life tables; Vital statistics; Levels of prevention; Epidemiological transition"),
       g("Public health", "Nutrition programmes; Maternal and child health; Immunisation programmes; Water purification; Sanitation and excreta disposal; Occupational health; Environmental health; Health education; Primary health care; Health system structure; Communicable disease control; Non-communicable disease control; Demography and family planning; Disaster management; Mental health in the community; Vector-borne diseases; Zoonoses; Biomedical waste in the community"),
-    ],
-  },
-  {
-    id: "dental-anatomy", name: "Dental Anatomy and Oral Biology", program: "BDS",
-    aspects: ["{e}: morphology and features", "{e}: development and eruption", "{e}: histology and structure", "{e}: function and clinical significance", "{e}: variations and anomalies"],
-    groups: [
-      g("Teeth", "Maxillary central incisor; Maxillary lateral incisor; Maxillary canine; Maxillary first premolar; Maxillary first molar; Mandibular central incisor; Mandibular canine; Mandibular first premolar; Mandibular first molar; Mandibular second molar; Deciduous incisors; Deciduous molars; Third molar; Occlusion; Tooth numbering systems; Dental arches"),
-      g("Oral tissues", "Enamel; Dentine; Dental pulp; Cementum; Periodontal ligament; Alveolar bone; Gingiva; Oral mucosa; Tooth eruption; Odontogenesis; Salivary glands in the mouth; Saliva composition; Temporomandibular joint function; Mastication; Dental lamina and tooth bud"),
-    ],
-  },
-  {
-    id: "oral-pathology", name: "Oral Pathology and Oral Medicine", program: "BDS",
-    aspects: ["{e}: aetiology and pathogenesis", "{e}: clinical features", "{e}: histopathology", "{e}: diagnosis and investigations", "{e}: treatment and prognosis"],
-    groups: [
-      g("Dental and jaw lesions", "Dental caries; Pulpitis; Periapical abscess; Periapical granuloma; Radicular cyst; Dentigerous cyst; Odontogenic keratocyst; Ameloblastoma; Odontogenic myxoma; Cementoblastoma; Fibrous dysplasia of the jaws; Cherubism; Osteomyelitis of the jaws; Dry socket; Ludwig angina; Developmental disturbances of teeth; Amelogenesis imperfecta; Dentinogenesis imperfecta"),
-      g("Oral mucosal and salivary disease", "Oral leukoplakia; Oral submucous fibrosis; Oral squamous cell carcinoma; Oral lichen planus; Recurrent aphthous stomatitis; Candidiasis of the mouth; Pemphigus in the mouth; Herpetic gingivostomatitis; Pleomorphic adenoma; Mucoepidermoid carcinoma; Sjogren syndrome; Mucocele and ranula; Sialolithiasis; Burning mouth syndrome; Trigeminal neuralgia; Oral manifestations of HIV; Oral manifestations of systemic disease; Geographic tongue; Syphilis in the mouth; Oral premalignant lesions"),
-    ],
-  },
-  {
-    id: "dental-materials", name: "Dental Materials", program: "BDS",
-    aspects: ["{e}: composition and setting reaction", "{e}: properties and selection", "{e}: manipulation technique", "{e}: advantages and limitations", "{e}: failures and troubleshooting"],
-    groups: [
-      g("Restorative and impression materials", "Dental amalgam; Composite resin; Glass ionomer cement; Resin-modified glass ionomer; Zinc phosphate cement; Zinc oxide eugenol; Calcium hydroxide liners; Dental ceramics; Zirconia; Dental adhesives; Alginate; Elastomeric impression materials; Impression compound; Gypsum products; Dental waxes; Acrylic resins; Cast metal alloys; Orthodontic wires; Dental investments; Endodontic sealers; Gutta-percha; Dental implants materials; Bleaching agents; Pit and fissure sealants; Mineral trioxide aggregate; Silicone elastomers; Denture base materials; Soldering and welding; Corrosion in the mouth; Finishing and polishing materials"),
-    ],
-  },
-  {
-    id: "periodontology", name: "Periodontology and Oral Surgery", program: "BDS",
-    aspects: ["{e}: aetiology and classification", "{e}: clinical features", "{e}: diagnosis and radiographs", "{e}: treatment plan and technique", "{e}: complications and maintenance"],
-    groups: [
-      g("Periodontology", "Gingivitis; Chronic periodontitis; Aggressive periodontitis; Necrotising periodontal disease; Gingival enlargement; Dental plaque and calculus; Periodontal pocket; Furcation involvement; Scaling and root planing; Flap surgery; Gingival recession; Mucogingival surgery; Guided tissue regeneration; Bone grafts; Dental implants; Peri-implantitis; Periodontal abscess; Occlusal trauma"),
-      g("Oral and maxillofacial surgery", "Tooth extraction technique; Impacted third molar; Local anaesthesia in dentistry; Inferior alveolar nerve block; Mandibular fracture; Maxillary fracture Le Fort; Zygomatic complex fracture; Oroantral fistula; Cleft lip repair; Cleft palate repair; Orthognathic surgery; Temporomandibular joint dislocation; Maxillofacial space infections; Biopsy techniques; Pre-prosthetic surgery; Medical emergencies in the dental clinic; Haemorrhage control after extraction"),
-    ],
-  },
-  {
-    id: "dental-clinical", name: "Orthodontics, Prosthodontics, Conservative and Paediatric Dentistry", program: "BDS",
-    aspects: ["{e}: principles and classification", "{e}: clinical procedure", "{e}: diagnosis and treatment planning", "{e}: materials and biomechanics", "{e}: complications and follow-up"],
-    groups: [
-      g("Orthodontics", "Malocclusion classification; Angle classification; Cephalometric analysis; Growth and development of the jaws; Fixed orthodontic appliances; Removable orthodontic appliances; Functional appliances; Orthodontic tooth movement; Anchorage; Space analysis; Crowding; Open bite; Cross bite; Retention and relapse; Interceptive orthodontics; Habits and malocclusion"),
-      g("Prosthodontics", "Complete denture; Partial denture; Denture impression techniques; Jaw relation records; Teeth arrangement; Fixed partial denture; Crown preparation; Occlusion in prosthodontics; Maxillofacial prosthesis; Implant-supported prosthesis; Overdenture; Denture complications; Denture insertion and adjustment; Post and core"),
-      g("Conservative dentistry and endodontics", "Cavity preparation principles; Class I cavity; Class II cavity; Class V cavity; Pulp capping; Root canal treatment; Working length determination; Root canal irrigants; Obturation techniques; Rubber dam isolation; Endodontic emergencies; Tooth bleaching; Dental trauma management; Apexification; Pulpotomy; Post-endodontic restoration; Endodontic surgery"),
-      g("Paediatric and preventive dentistry", "Early childhood caries; Behaviour management in children; Pulpotomy in primary teeth; Space maintainers; Stainless steel crowns; Fluoride therapy; Pit and fissure sealing; Dental trauma in children; Oral habits in children; Caries risk assessment; Dental public health; Oral hygiene instructions; Dental fluorosis; Atraumatic restorative treatment"),
-      g("Oral radiology", "Intraoral radiographs; Panoramic radiography; Cone beam CT in dentistry; Radiographic errors; Radiation safety in dentistry; Radiographic interpretation of caries; Radiographic interpretation of periapical lesions; Digital radiography"),
-    ],
-  },
-  {
-    id: "oral-physiology", name: "Oral Physiology and Biochemistry", program: "BDS",
-    aspects: ["{e}: normal physiology", "{e}: mechanism step by step", "{e}: regulation and control", "{e}: clinical significance in dentistry", "{e}: worked example"],
-    groups: [
-      g("Oral physiology", "Salivary secretion and its control; Composition and functions of saliva; Mastication and the masticatory muscles; Deglutition; Taste sensation and taste pathway; Pain pathway of the tooth and dentine hypersensitivity; Mandibular movements and the Posselt envelope; Speech production; Swallowing reflex; Muscle contraction and the sliding filament theory; Hearing and the auditory pathway; Calcium and phosphate homeostasis; Thyroid and parathyroid hormones; Vitamin D and bone mineralisation"),
-      g("Oral biochemistry", "Enamel mineralisation and amelogenesis; Dentine and collagen synthesis; Fluoride and fluorapatite; Plaque pH and the Stephan curve; Dental plaque biofilm metabolism; Salivary buffer systems; Bone remodelling and RANKL; Collagen synthesis and vitamin C; Carbohydrate metabolism and caries; Acid-base balance and buffers"),
-    ],
-  },
-  {
-    id: "dental-pharm-micro", name: "Dental Pharmacology and Oral Microbiology", program: "BDS",
-    aspects: ["{e}: mechanism of action", "{e}: clinical uses in dentistry", "{e}: adverse effects and interactions", "{e}: pathogenesis and features", "{e}: prevention and control"],
-    groups: [
-      g("Dental pharmacology", "Local anaesthetics in dentistry; Vasoconstrictors in local anaesthesia; Analgesics for dental pain; NSAIDs after dental extraction; Antibiotics for odontogenic infections; Antibiotic prophylaxis for infective endocarditis; Chlorhexidine mouthwash; Fluoride preparations; Sedation in dentistry; Management of medical emergencies in the dental chair; Drug-induced gingival overgrowth; Xerostomia-causing drugs"),
-      g("Oral microbiology and infection control", "Streptococcus mutans and caries; Dental plaque formation; Periodontal pathogens; Candida albicans in the mouth; Infection control in the dental clinic; Sterilisation of dental instruments; Hepatitis B and the dental team; Dental unit waterline contamination; Odontogenic infection spread; Infective endocarditis after dental procedures"),
     ],
   },
   {

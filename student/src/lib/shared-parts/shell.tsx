@@ -142,7 +142,7 @@ export function SideNav({ user, onClose }: { user: User; onClose: () => void }) 
     <div className="relative z-[1] mb-6 flex items-center justify-between px-2"><Logo dark href="/dashboard" /><button className="rounded-lg p-2 text-sidebar-foreground/60 hover:bg-sidebar-accent md:hidden" onClick={onClose} aria-label="Close menu" data-testid="button-close-menu"><X size={18} /></button></div>
     <SidebarNav groups={navView} onNavigate={onClose} />
     <div className="relative z-[1] mt-auto pt-6">
-      <SidebarProfile initials={initials(user.name)} name={user.name} subtitle={user.institution || 'Medical student'} onSignOut={() => logout.mutate()} signingOut={logout.isPending} />
+      <SidebarProfile initials={initials(user.name)} name={user.name} subtitle={user.institution || 'MDCAT student'} onSignOut={() => logout.mutate()} signingOut={logout.isPending} />
     </div>
   </aside>;
 }

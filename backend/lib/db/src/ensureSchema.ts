@@ -778,6 +778,11 @@ CREATE TABLE IF NOT EXISTS med_course_years (
 );
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
 ALTER TABLE med_users ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
+ALTER TABLE med_blocks ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_books ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_past_papers ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_exams ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
 
 -- med_modules: optional Block grouping (added after med_modules' initial
 -- CREATE TABLE ran in production) — nullable so existing modules keep
@@ -797,7 +802,7 @@ CREATE INDEX IF NOT EXISTS med_chapters_subject_idx ON med_chapters (subject_id)
 -- rows default to 'reviewer' so they don't disappear from every group.
 ALTER TABLE med_team_members ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'reviewer';
 
--- med_institutions: MDCAT vs BDS college split (see schema/medschool.ts).
+-- med_institutions: college kind (see schema/medschool.ts).
 -- Existing rows default to '' — they still show up (grouped as "Unset" in
 -- the admin UI) until someone assigns them a kind; nothing gets hidden by
 -- this column showing up on an existing database.

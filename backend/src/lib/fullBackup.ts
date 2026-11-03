@@ -290,7 +290,7 @@ export interface ValidationResult {
 // relies on); not every column in the schema.
 const FK_CHECKS: Record<string, Array<[string, string]>> = {
   mdcatFlashcardState:[["userId","users"],["flashcardId","flashcards"]],
-  mdcatLectures:[["subjectId","subjects"],["topicId","topics"]], mdcatLectureProgress:[["userId","users"],["lectureId","mdcatLectures"]],
+  mdcatLectures:[["subjectId","subjects"],["topicId","topics"],["chapterId","chapters"]], mdcatLectureProgress:[["userId","users"],["lectureId","mdcatLectures"]],
   mdcatNotes:[["subjectId","subjects"]],
   mdcatNoteState:[["userId","users"],["noteId","mdcatNotes"]],
   mdcatBookMarks:[["userId","users"],["bookId","books"]],

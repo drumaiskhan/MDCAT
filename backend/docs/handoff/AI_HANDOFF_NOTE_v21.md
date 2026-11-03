@@ -152,7 +152,7 @@ a query loads) and was left alone.
 ### 6. Past papers: admin tree now groups by study year, not calendar year
 
 `frontend-admin/src/pages/AdminPastPapers.tsx` previously grouped papers
-into MDCAT/BDS, then by the paper's own free-text `year` field (2024, 2023,
+into MDCAT, then by the paper's own free-text `year` field (2024, 2023,
 …) — that's the "MDCAT COLLEGES > 2024 > 2023…" tree in the screenshot the
 owner sent. Changed the second grouping level to the paper's *study* year
 (1st Year, 2nd Year, 3rd Year, 4th Year, Final Year) instead, so a batch

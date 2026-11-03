@@ -334,7 +334,7 @@ function AdminSettings() {
                 <div className="grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
                   <Field label="Program">
                     <SelectInput value={values.GLOBAL_TRIAL_PROGRAM || ''} onChange={(e) => set('GLOBAL_TRIAL_PROGRAM', e.target.value)} data-testid="select-global-trial-program">
-                      <option value="">All programs</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option>
+                      <option value="">All programs</option><option value="MDCAT">MDCAT</option>
                     </SelectInput>
                   </Field>
                   <div>

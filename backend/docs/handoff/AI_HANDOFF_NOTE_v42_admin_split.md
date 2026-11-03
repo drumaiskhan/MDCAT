@@ -29,7 +29,7 @@
 
 ## MCQ bank Export / Import with structure (v18)
 - Admin → MCQ bank → "Export / import backup" (`components/McqBackupPanel.tsx`, replaces the inline panel in AdminMcqs).
-- Scope picker (`BackupScopePicker`) now has **One program (MDCAT / BDS / Shared)** and, for **One year**, an optional program (Any / MDCAT / BDS / Shared). "Shared" = content with no programTargetKind.
+- Scope picker (`BackupScopePicker`) now has **One program (MDCAT / Shared)** and, for **One year**, an optional program (Any / MDCAT / Shared). "Shared" = content with no programTargetKind.
 - Export file is format **v2**: questions + `structure` (blocks, modules, subjects, topics incl. empty ones, past papers, exams, exam_questions) + `coverage` (which source nodes the scope covers). Whole-bank export carries the whole tree. v1 files still import the old way (raw ids, structure must exist).
 - Import (`POST /admin/mcq-backup/import?mode=merge|append|replace`, default **merge**): rebuilds missing structure and remaps every id, all in ONE transaction (rolls back fully on error). Nodes are matched before created (block: name+program+year; module/subject/topic: name under mapped parent; paper: title+board+year+level; exam: title+start) so restoring into the same DB reuses the tree. Restored exams always come back as drafts. `replace` only deletes what the scope covers (via `coverage`), never other programs/years.
 - `POST /admin/mcq-backup/preview` = dry run with identical logic; the UI shows it before the confirm button enables.

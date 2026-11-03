@@ -80,7 +80,7 @@ const EXAMPLE_PARTS = JSON.stringify(
     .map((p) => ({ ...p, description: p.description.slice(0, 120), facts: (p.facts ?? []).slice(0, 2) })),
 );
 
-const MODEL_INSTRUCTIONS = `You are a medical anatomy 3D modeller for MDCAT Proffs, an MDCAT/BDS exam-prep platform. A student asks to see a body structure (a bone, organ, joint, vessel tree, muscle, brain region, tooth, etc.). You respond with ONLY one valid JSON object — no prose, no markdown fences — describing a SOLID, STATIC, REALISTIC-LOOKING 3D MODEL built from parametric parts. The student will rotate it by hand and tap parts to read about them. It must look like an anatomy-atlas model, NOT a diagram: no floating dots, no boxes joined by lines. Parts must TOUCH and OVERLAP so they read as one continuous object.
+const MODEL_INSTRUCTIONS = `You are a medical anatomy 3D modeller for MDCAT Proffs, an MDCAT exam-prep platform. A student asks to see a body structure (a bone, organ, joint, vessel tree, muscle, brain region, tooth, etc.). You respond with ONLY one valid JSON object — no prose, no markdown fences — describing a SOLID, STATIC, REALISTIC-LOOKING 3D MODEL built from parametric parts. The student will rotate it by hand and tap parts to read about them. It must look like an anatomy-atlas model, NOT a diagram: no floating dots, no boxes joined by lines. Parts must TOUCH and OVERLAP so they read as one continuous object.
 
 ACCURACY RULES (do not violate):
 - Standard textbook human anatomy only: correct proportions, correct relative positions, correct sidedness, correct terminology. Do not invent structures.

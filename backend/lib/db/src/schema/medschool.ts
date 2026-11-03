@@ -28,13 +28,9 @@ export const institutionsTable = pgTable("med_institutions", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   city: text("city").notNull().default(""),
-  // Which program the college itself is registered under — a real-world
-  // MDCAT college and a BDS college are different institutions even when
-  // students colloquially call both "my college", so this is a property
-  // of the institution row, not just the programsTable row underneath it.
-  // Free text (default "") so legacy rows created before this column
-  // existed don't disappear from anywhere; the admin UI only ever writes
-  // "MDCAT" or "BDS" into it.
+  // Which program the college itself is registered under. Free text
+  // (default "") so legacy rows created before this column existed don't
+  // disappear from anywhere; the admin UI only ever writes "MDCAT" into it.
   kind: text("kind").notNull().default(""),
   active: boolean("active").notNull().default(true),
   displayOrder: integer("display_order").notNull().default(0),
@@ -49,7 +45,7 @@ export const programsTable = pgTable("med_programs", {
   // e.g. two different colleges' "MDCAT" program rows both get kind="MDCAT",
   // so a module targeted at MDCAT shows to every MDCAT student regardless of
   // institution. Free text so admins aren't locked out of other programs,
-  // but the importer/UI steer toward MDCAT/BDS.
+  // but the importer/UI steer toward MDCAT.
   kind: text("kind").notNull().default(""),
   active: boolean("active").notNull().default(true),
   displayOrder: integer("display_order").notNull().default(0),
@@ -351,6 +347,8 @@ export const blocksTable = pgTable("med_blocks", {
   // Mirrors modulesTable's targeting columns exactly, same semantics.
   programTargetKind: text("program_target_kind"),
   yearTargetNumber: integer("year_target_number"),
+  // FSc course year(s) this row is limited to (ids from med_course_years). Empty = every course year.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   // Optional thumbnail, resolved the same way as other storagePath-style
   // columns via resolveFileUrl() in api-server/src/lib/storage.ts.
   iconPath: text("icon_path"),
@@ -380,6 +378,8 @@ export const modulesTable = pgTable("med_modules", {
   // never individually targeted.
   programTargetKind: text("program_target_kind"),
   yearTargetNumber: integer("year_target_number"),
+  // FSc course year(s) this row is limited to (ids from med_course_years). Empty = every course year.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   active: boolean("active").notNull().default(true),
   archived: boolean("archived").notNull().default(false),
   displayOrder: integer("display_order").notNull().default(0),
@@ -527,7 +527,7 @@ export const booksTable = pgTable("med_books", {
   topicId: integer("topic_id"),
   // Simple targeting mirroring modulesTable/pastPapersTable's
   // programTargetKind + yearTargetNumber — the admin "Add book" form now
-  // picks a Degree (MDCAT/BDS) + Year directly instead of a Module/Subject/
+  // picks a Degree (MDCAT) + Year directly instead of a Module/Subject/
   // Topic, same reasoning as pastPapersTable: that tree requires curriculum
   // structure to already exist, which most admins never set up for books.
   // Null on either axis means "all programs" / "all years" on that axis,
@@ -535,6 +535,8 @@ export const booksTable = pgTable("med_books", {
   // books created before this picker existed.
   programTargetKind: text("program_target_kind"),
   yearTargetNumber: integer("year_target_number"),
+  // FSc course year(s) this row is limited to (ids from med_course_years). Empty = every course year.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   storagePath: text("storage_path").notNull(),
   coverImagePath: text("cover_image_path"),
   active: boolean("active").notNull().default(true),
@@ -661,6 +663,8 @@ export const pastPapersTable = pgTable("med_past_papers", {
   // Null means "all programs" / "all years" on that axis, same convention.
   programTargetKind: text("program_target_kind"),
   yearTargetNumber: integer("year_target_number"),
+  // FSc course year(s) this row is limited to (ids from med_course_years). Empty = every course year.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   active: boolean("active").notNull().default(true),
   archived: boolean("archived").notNull().default(false),
   displayOrder: integer("display_order").notNull().default(0),
@@ -701,6 +705,8 @@ export const examsTable = pgTable("med_exams", {
   // Eligibility — same targeting model as modules (null = everyone on that axis)
   programTargetKind: text("program_target_kind"),
   yearTargetNumber: integer("year_target_number"),
+  // FSc course year(s) this row is limited to (ids from med_course_years). Empty = every course year.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   durationMinutes: integer("duration_minutes").notNull().default(60),
   startAt: timestamp("start_at", { withTimezone: true }).notNull(),
   endAt: timestamp("end_at", { withTimezone: true }).notNull(),

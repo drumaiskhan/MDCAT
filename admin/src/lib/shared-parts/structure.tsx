@@ -39,12 +39,13 @@ import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiReq
 
 import { AdminImageUpload } from './misc';
 import { Badge, ConfirmDialog, cn } from './ui';
+import { CourseYearPicker, CourseYearBadges } from './courseYears';
 
 
 export const YEAR_OPTIONS = [1];
 
-export function ModuleTargetingFields({ programTargetKind, yearTargetNumber, onChange }: { programTargetKind: string; yearTargetNumber: string; onChange: (patch: { programTargetKind?: string; yearTargetNumber?: string }) => void }) {
-  return <div className="flex flex-wrap gap-3"><label className="text-xs font-bold">Program<select value={programTargetKind} onChange={(e) => onChange({ programTargetKind: e.target.value })} className="mt-1 h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid="select-module-program-target"><option value="">All Programs</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option></select></label><label className="text-xs font-bold">Academic year<select value={yearTargetNumber} onChange={(e) => onChange({ yearTargetNumber: e.target.value })} className="mt-1 h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid="select-module-year-target"><option value="">All Years</option>{YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}{y === 1 ? 'st' : y === 2 ? 'nd' : y === 3 ? 'rd' : 'th'} Year</option>)}</select></label></div>;
+export function ModuleTargetingFields({ programTargetKind, yearTargetNumber, courseYearIds, onChange }: { programTargetKind: string; yearTargetNumber: string; courseYearIds?: number[]; onChange: (patch: { programTargetKind?: string; yearTargetNumber?: string; courseYearIds?: number[] }) => void }) {
+  return <div className="flex flex-wrap items-start gap-3"><label className="text-xs font-bold">Program<select value={programTargetKind} onChange={(e) => onChange({ programTargetKind: e.target.value })} className="mt-1 h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid="select-module-program-target"><option value="">All Programs</option><option value="MDCAT">MDCAT</option></select></label><label className="text-xs font-bold">Academic year<select value={yearTargetNumber} onChange={(e) => onChange({ yearTargetNumber: e.target.value })} className="mt-1 h-10 rounded-xl border border-border bg-card px-3 text-xs" data-testid="select-module-year-target"><option value="">All Years</option>{YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}{y === 1 ? 'st' : y === 2 ? 'nd' : y === 3 ? 'rd' : 'th'} Year</option>)}</select></label>{courseYearIds !== undefined && <CourseYearPicker value={courseYearIds} onChange={(ids) => onChange({ courseYearIds: ids })} testIdPrefix="module-course-year" className="basis-full" />}</div>;
 }
 
 // A single module row — exactly the markup AdminContent always rendered,
@@ -66,6 +67,7 @@ export function ModuleRow({ m, canMoveUp, canMoveDown, onReorder, update, curric
   // editYear) since it's only ever read/written while this row's own edit
   // panel is open.
   const [editName, setEditName] = useState(m.name);
+  const [editCourseYears, setEditCourseYears] = useState<number[]>(m.courseYearIds ?? []);
   // Thumbnail could be set at creation (AddModuleForm) but never changed
   // afterward — the edit panel below had no image control at all, even
   // though PATCH /modules/:id already accepts iconPath (same as Blocks and
@@ -85,14 +87,15 @@ export function ModuleRow({ m, canMoveUp, canMoveDown, onReorder, update, curric
       <div className="min-w-[8rem] flex-1"><div className="text-sm font-bold">{m.name}</div><div className="mt-1 text-xs text-muted-foreground">{m.subjectCount} subjects · {m.topicCount} topics</div></div>
       <button onClick={() => update.mutate({ id: m.id, body: { active: !m.active } })} disabled={update.isPending} data-testid={`button-toggle-published-${m.id}`}><Badge tone={m.active ? 'green' : 'neutral'}>{m.active ? 'published' : 'draft'}</Badge></button>
       <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold text-muted-foreground" data-testid={`text-targeting-${m.id}`}>{m.targetingLabel || 'All Programs + All Years'}</span>
+      <CourseYearBadges ids={m.courseYearIds} />
       <button onClick={() => setCurriculumId(curriculumId === m.id ? null : m.id)} className={cn('rounded-lg px-3 py-2 text-[11px] font-bold', curriculumId === m.id ? 'bg-primary/10 text-primary' : 'border border-border text-muted-foreground hover:bg-muted')} data-testid={`button-manage-curriculum-${m.id}`}>{curriculumId === m.id ? 'Hide subjects' : 'Subjects & topics'}</button>
-      <button onClick={() => { if (editingId === m.id) { setEditingId(null); } else { setEditingId(m.id); setEditName(m.name); setEditProgram(m.programTargetKind || ''); setEditYear(m.yearTargetNumber ? String(m.yearTargetNumber) : ''); setEditIcon(undefined); setEditIconPreview(m.iconUrl ?? null); } }} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" data-testid={`button-content-menu-${m.id}`}><Pencil size={15} /></button>
+      <button onClick={() => { if (editingId === m.id) { setEditingId(null); } else { setEditingId(m.id); setEditName(m.name); setEditProgram(m.programTargetKind || ''); setEditYear(m.yearTargetNumber ? String(m.yearTargetNumber) : ''); setEditCourseYears(m.courseYearIds ?? []); setEditIcon(undefined); setEditIconPreview(m.iconUrl ?? null); } }} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" data-testid={`button-content-menu-${m.id}`}><Pencil size={15} /></button>
       <button onClick={() => setDeletingId(m.id)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" data-testid={`button-delete-module-${m.id}`}><Trash2 size={15} /></button>
     </div>
     {editingId === m.id && <div className="mt-4 space-y-3 border-t border-border pt-4">
       <label className="block text-[11px] font-bold text-muted-foreground">Module name<input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-1 h-9 w-full max-w-sm rounded-lg border border-border bg-background px-3 text-xs" data-testid={`input-rename-module-${m.id}`} /></label>
       <div className="max-w-sm"><div className="mb-1 text-[11px] font-bold text-muted-foreground">Thumbnail</div><AdminImageUpload currentUrl={editIconPreview || ''} kind="resource" accept="image/png,image/jpeg,image/webp" hint="Optional thumbnail · PNG, JPEG, or WEBP." testId={`input-module-icon-upload-${m.id}`} onUploaded={(storagePath, previewUrl) => { setEditIcon(storagePath); setEditIconPreview(previewUrl); }} /></div>
-      <div className="flex flex-wrap items-end gap-3"><ModuleTargetingFields programTargetKind={editProgram} yearTargetNumber={editYear} onChange={(patch) => { if (patch.programTargetKind !== undefined) setEditProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setEditYear(patch.yearTargetNumber); }} /><button onClick={() => { if (!editName.trim()) return; update.mutate({ id: m.id, body: { name: editName.trim(), programTargetKind: editProgram || null, yearTargetNumber: editYear ? Number(editYear) : null, ...(editIcon !== undefined ? { iconPath: editIcon } : {}) } }, { onSuccess: () => setEditingId(null) } as never); }} disabled={!editName.trim() || update.isPending} className="h-10 rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-save-targeting-${m.id}`}>Save changes</button></div>
+      <div className="flex flex-wrap items-end gap-3"><ModuleTargetingFields programTargetKind={editProgram} yearTargetNumber={editYear} courseYearIds={editCourseYears} onChange={(patch) => { if (patch.programTargetKind !== undefined) setEditProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setEditYear(patch.yearTargetNumber); if (patch.courseYearIds !== undefined) setEditCourseYears(patch.courseYearIds); }} /><button onClick={() => { if (!editName.trim()) return; update.mutate({ id: m.id, body: { name: editName.trim(), programTargetKind: editProgram || null, yearTargetNumber: editYear ? Number(editYear) : null, courseYearIds: editCourseYears, ...(editIcon !== undefined ? { iconPath: editIcon } : {}) } }, { onSuccess: () => setEditingId(null) } as never); }} disabled={!editName.trim() || update.isPending} className="h-10 rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-save-targeting-${m.id}`}>Save changes</button></div>
     </div>}
     {curriculumId === m.id && <div className="mt-4 border-t border-border pt-4"><SubjectsTopicsManager moduleId={m.id} breadcrumb={`${m.blockName || 'Other modules'} > ${m.name}`} /></div>}
   </div>;
@@ -109,12 +112,13 @@ export function ModuleRow({ m, canMoveUp, canMoveDown, onReorder, update, curric
 export function AddModuleForm({ blockId, onCreate, onDone }: { blockId: number | null; onCreate: ReturnType<typeof useMutation<AdminModule, unknown, Parameters<typeof moduleAdminApi.create>[0]>>; onDone: () => void }) {
   const [program, setProgram] = useState('');
   const [year, setYear] = useState('');
+  const [courseYears, setCourseYears] = useState<number[]>([]);
   const [iconPath, setIconPath] = useState<string | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
-  return <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onCreate.mutate({ name: String(f.get('name')), subtitle: '', active: true, blockId, iconPath: iconPath ?? undefined, programTargetKind: program || null, yearTargetNumber: year ? Number(year) : null }, { onSuccess: onDone }); }} className="mb-5 space-y-3 rounded-2xl border border-primary/30 bg-primary/10 p-5">
+  return <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onCreate.mutate({ name: String(f.get('name')), subtitle: '', active: true, blockId, iconPath: iconPath ?? undefined, programTargetKind: program || null, yearTargetNumber: year ? Number(year) : null, courseYearIds: courseYears }, { onSuccess: onDone }); }} className="mb-5 space-y-3 rounded-2xl border border-primary/30 bg-primary/10 p-5">
     <input required name="name" placeholder="Module name" className="h-10 w-full rounded-xl border border-border bg-card px-3 text-xs" data-testid="input-module-name" />
     <AdminImageUpload currentUrl={iconPreview || ''} kind="resource" accept="image/png,image/jpeg,image/webp" hint="Optional thumbnail · PNG, JPEG, or WEBP." testId="input-module-icon-upload" onUploaded={(storagePath, previewUrl) => { setIconPath(storagePath); setIconPreview(previewUrl); }} />
-    <ModuleTargetingFields programTargetKind={program} yearTargetNumber={year} onChange={(patch) => { if (patch.programTargetKind !== undefined) setProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setYear(patch.yearTargetNumber); }} />
+    <ModuleTargetingFields programTargetKind={program} yearTargetNumber={year} courseYearIds={courseYears} onChange={(patch) => { if (patch.programTargetKind !== undefined) setProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setYear(patch.yearTargetNumber); if (patch.courseYearIds !== undefined) setCourseYears(patch.courseYearIds); }} />
     <p className="text-[11px] text-muted-foreground">This module will be visible to: <span className="font-bold text-primary">{(program || 'All Programs')} + {(year ? `${year}${year === '1' ? 'st' : year === '2' ? 'nd' : year === '3' ? 'rd' : 'th'} Year` : 'All Years')}</span></p>
     <button className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-save-module">Save</button>
   </form>;
@@ -133,12 +137,13 @@ export function AddModuleForm({ blockId, onCreate, onDone }: { blockId: number |
 export function BlockForm({ initial, onSubmit, pending, onCancel }: { initial?: AdminBlock; onSubmit: (body: Parameters<typeof blockAdminApi.create>[0]) => void; pending: boolean; onCancel: () => void }) {
   const [program, setProgram] = useState(initial?.programTargetKind || '');
   const [year, setYear] = useState(initial?.yearTargetNumber ? String(initial.yearTargetNumber) : '');
+  const [courseYears, setCourseYears] = useState<number[]>(initial?.courseYearIds ?? []);
   const [iconPath, setIconPath] = useState<string | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(initial?.iconUrl ?? null);
-  return <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSubmit({ name: String(f.get('name')), subtitle: initial?.subtitle || '', active: true, iconPath: iconPath ?? undefined, programTargetKind: program || null, yearTargetNumber: year ? Number(year) : null }); }} className="mb-5 space-y-3 rounded-2xl border border-primary/30 bg-primary/10 p-5">
+  return <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSubmit({ name: String(f.get('name')), subtitle: initial?.subtitle || '', active: true, iconPath: iconPath ?? undefined, programTargetKind: program || null, yearTargetNumber: year ? Number(year) : null, courseYearIds: courseYears }); }} className="mb-5 space-y-3 rounded-2xl border border-primary/30 bg-primary/10 p-5">
     <input required name="name" defaultValue={initial?.name} placeholder="Block name (e.g. Block A)" className="h-10 w-full rounded-xl border border-border bg-card px-3 text-xs" data-testid="input-block-name" />
     <AdminImageUpload currentUrl={iconPreview || ''} kind="resource" accept="image/png,image/jpeg,image/webp" hint="Optional thumbnail · PNG, JPEG, or WEBP." testId="input-block-icon-upload" onUploaded={(storagePath, previewUrl) => { setIconPath(storagePath); setIconPreview(previewUrl); }} />
-    <ModuleTargetingFields programTargetKind={program} yearTargetNumber={year} onChange={(patch) => { if (patch.programTargetKind !== undefined) setProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setYear(patch.yearTargetNumber); }} />
+    <ModuleTargetingFields programTargetKind={program} yearTargetNumber={year} courseYearIds={courseYears} onChange={(patch) => { if (patch.programTargetKind !== undefined) setProgram(patch.programTargetKind); if (patch.yearTargetNumber !== undefined) setYear(patch.yearTargetNumber); if (patch.courseYearIds !== undefined) setCourseYears(patch.courseYearIds); }} />
     <div className="flex gap-2"><button disabled={pending} className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground" data-testid="button-save-block">Save</button><button type="button" onClick={onCancel} className="rounded-xl border border-border px-4 py-2 text-xs font-bold text-muted-foreground">Cancel</button></div>
   </form>;
 }
@@ -263,33 +268,27 @@ export function TopicsManager({ subjectId }: { subjectId: number }) {
   </div>;
 }
 
-// A real-world MDCAT college and a BDS college are different institutions
-// even when they share a university name, so "kind" lives on the
-// institution row itself (see schema/medschool.ts) — this list is now
-// split into an MDCAT tab and a BDS tab instead of one flat list, and
-// adding a college requires picking which one it is. Institutions saved
-// before this existed have kind="" and surface under a third "Unset" tab
+// "kind" lives on the institution row itself (see schema/medschool.ts) —
+// this list shows an MDCAT tab, and
+// institutions saved before this existed have kind="" and surface under an "Unset" tab
 // (hidden once nothing is left in it) so nothing silently disappears.
 
-export const INSTITUTION_KIND_TABS: Array<{ key: 'MDCAT' | 'BDS'; label: string }> = [
+export const INSTITUTION_KIND_TABS: Array<{ key: 'MDCAT'; label: string }> = [
   { key: 'MDCAT', label: 'MDCAT colleges' },
-  { key: 'BDS', label: 'BDS colleges' },
 ];
 
 export function AdminInstitutionsList({ selectedId, onSelect }: { selectedId: number | null; onSelect: (id: number) => void }) {
   const institutions = useQuery({ queryKey: ['admin-institutions'], queryFn: () => academicApi.institutions() });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-institutions'] });
-  const [kindTab, setKindTab] = useState<'MDCAT' | 'BDS' | ''>('MDCAT');
+  const [kindTab, setKindTab] = useState<'MDCAT' | ''>('MDCAT');
   const [name, setName] = useState('');
-  const [addKind, setAddKind] = useState<'MDCAT' | 'BDS'>('MDCAT');
+  const [addKind, setAddKind] = useState<'MDCAT'>('MDCAT');
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deletingPermanentId, setDeletingPermanentId] = useState<number | null>(null);
-  // Keep the "Add college" form's type in step with whichever tab is open
-  // — adding a college while looking at the BDS tab should default to
-  // adding a BDS college, not silently add it to MDCAT. Only follows real
-  // tabs; the Unset tab has no matching add-kind, so it's left alone.
-  useEffect(() => { if (kindTab === 'MDCAT' || kindTab === 'BDS') setAddKind(kindTab); }, [kindTab]);
+  // Keep the "Add college" form's type in step with the open tab. The Unset
+  // tab has no matching add-kind, so it's left alone.
+  useEffect(() => { if (kindTab === 'MDCAT') setAddKind(kindTab); }, [kindTab]);
 
   const createInstitution = useMutation({ mutationFn: academicApi.createInstitution, onSuccess: invalidate, onError: (err: unknown) => toast({ title: 'Could not create institution', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }) });
   const renameInstitution = useMutation({ mutationFn: ({ id, name }: { id: number; name: string }) => academicApi.updateInstitution(id, { name }), onSuccess: () => { invalidate(); setRenamingId(null); }, onError: (err: unknown) => toast({ title: 'Could not rename institution', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }) });
@@ -383,7 +382,7 @@ export function AdminInstitutionsList({ selectedId, onSelect }: { selectedId: nu
             <button type="button" disabled={idx === 0 || reorder.isPending} onClick={() => moveInstitution(idx, -1)} className="grid size-4 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30" data-testid={`button-move-up-institution-${i.id}`} aria-label="Move up"><ChevronUp size={12} /></button>
             <button type="button" disabled={idx === orderedInstitutions.length - 1 || reorder.isPending} onClick={() => moveInstitution(idx, 1)} className="grid size-4 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-30" data-testid={`button-move-down-institution-${i.id}`} aria-label="Move down"><ChevronDown size={12} /></button>
           </div>
-          <div className={cn('grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-extrabold', i.kind === 'BDS' ? 'bg-info/15 text-info' : i.kind === 'MDCAT' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>{i.name.trim().charAt(0).toUpperCase() || '?'}</div>
+          <div className={cn('grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-extrabold', i.kind === 'MDCAT' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>{i.name.trim().charAt(0).toUpperCase() || '?'}</div>
           {renamingId === i.id
             ? <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (renameValue.trim()) renameInstitution.mutate({ id: i.id, name: renameValue.trim() }); }} className="flex flex-1 items-center gap-1.5">
                 <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="h-7 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`input-rename-institution-${i.id}`} />
@@ -396,7 +395,7 @@ export function AdminInstitutionsList({ selectedId, onSelect }: { selectedId: nu
           {/* Always editable, not just while unset — an admin who typed a
               college into the wrong tab (or is fixing a legacy row) needs
               a way to correct it, not just set it once. */}
-          <select value={i.kind || ''} onChange={(e) => updateInstitutionKind.mutate({ id: i.id, kind: e.target.value })} className="h-6 rounded-md border border-border bg-background px-1 text-[10px] font-bold" data-testid={`select-institution-kind-${i.id}`}><option value="">Unset</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option></select>
+          <select value={i.kind || ''} onChange={(e) => updateInstitutionKind.mutate({ id: i.id, kind: e.target.value })} className="h-6 rounded-md border border-border bg-background px-1 text-[10px] font-bold" data-testid={`select-institution-kind-${i.id}`}><option value="">Unset</option><option value="MDCAT">MDCAT</option></select>
           <button type="button" onClick={() => { setRenamingId(i.id); setRenameValue(i.name); }} className="text-[10px] font-bold text-primary" data-testid={`button-rename-institution-${i.id}`}>Rename</button>
           <button type="button" onClick={() => toggleInstitution.mutate({ id: i.id, active: !i.active })} className="text-[10px] font-bold text-primary" data-testid={`button-toggle-institution-${i.id}`}>{i.active ? 'Archive' : 'Activate'}</button>
           {/* No longer gated behind "archived first" — the backend already
@@ -410,7 +409,7 @@ export function AdminInstitutionsList({ selectedId, onSelect }: { selectedId: nu
     </div>
     <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) { createInstitution.mutate({ name: name.trim(), kind: addKind, active: true }); setName(''); } }} className="mt-3 flex gap-1.5">
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add college, e.g. King Edward Medical University" className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-xs" data-testid="input-add-institution" />
-      <select value={addKind} onChange={(e) => setAddKind(e.target.value as 'MDCAT' | 'BDS')} className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-bold" data-testid="select-add-institution-kind"><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option></select>
+      <select value={addKind} onChange={(e) => setAddKind(e.target.value as 'MDCAT')} className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-bold" data-testid="select-add-institution-kind"><option value="MDCAT">MDCAT</option></select>
       <button className="rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground" data-testid="button-add-institution"><Plus size={13} /></button>
     </form>
     {deletingPermanentId !== null && <ConfirmDialog title="Delete this institution permanently?" body="This erases it for good — there is no undo. Any programmes, academic years, and batches under it are deleted along with it. Only blocked if students are still assigned to it — reassign or remove them first." confirmLabel="Delete forever" onCancel={() => setDeletingPermanentId(null)} onConfirm={() => removePermanent.mutate(deletingPermanentId)} pending={removePermanent.isPending} />}

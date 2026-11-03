@@ -18,13 +18,13 @@ function boolQuery(value: unknown): boolean | undefined {
 
 router.get("/institutions", async (req, res): Promise<void> => {
   const activeOnly = boolQuery(req.query.active) ?? !req.user;
-  // Optional ?kind=MDCAT|BDS filter so the student registration form can
-  // ask for "MDCAT colleges" or "BDS colleges" as two separate lists
-  // instead of one flat list of every institution regardless of program.
+  // Optional ?kind=MDCAT filter so the student registration form can
+  // ask for "MDCAT colleges"
+  // instead of every institution regardless of program.
   const kind = typeof req.query.kind === "string" ? req.query.kind.trim().toUpperCase() : undefined;
-  // Bug fix: every institution created before the MDCAT/BDS split (v13) has
+  // Bug fix: every institution created before the MDCAT split (v13) has
   // kind === "" (see ensureSchema's backfill). Filtering on an *exact* kind
-  // match meant a freshly-migrated deployment showed "No MDCAT/BDS colleges
+  // match meant a freshly-migrated deployment showed "No MDCAT colleges
   // are set up yet" on the public registration form for every one of those
   // colleges — the college picker looked broken even though the colleges
   // were right there in the admin panel's "Unset" tab. Matching kind === ""

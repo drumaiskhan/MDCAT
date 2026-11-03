@@ -1,4 +1,4 @@
-// v105: sanity checks for the ready-made figure library (dental + more body systems).
+// v105: sanity checks for the ready-made figure library (body systems).
 // Run: node tests/integration/05-figure-library.mjs
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +15,7 @@ const { FIGURES, selectFigures } = await import(pathToFileURL(join(tmp, "index.t
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed++; console.error("FAIL:", msg); } };
 
-const NEW = new Set(["hs-tooth","hs-caries","hs-dentition","hs-tooth-germ","hs-tmj","hs-tongue","hs-salivary","hs-mandible","hs-sarcomere","hs-ear","hs-lymph-node","hs-thyroid","hs-long-bone","hs-reflex-arc"]);
+const NEW = new Set(["hs-tmj","hs-tongue","hs-salivary","hs-mandible","hs-sarcomere","hs-ear","hs-lymph-node","hs-thyroid","hs-long-bone","hs-reflex-arc"]);
 check([...NEW].every((id) => FIGURES.some((f) => f.id === id)), "all v105 figures must be registered");
 const ids = FIGURES.map((f) => f.id);
 check(new Set(ids).size === ids.length, "figure ids must be unique");
@@ -37,10 +37,6 @@ for (const f of FIGURES) {
 }
 
 const expect = {
-  "Dental caries: pathogenesis": "hs-caries",
-  "Periodontal ligament": "hs-tooth",
-  "Tooth numbering systems": "hs-dentition",
-  "Odontogenesis stages": "hs-tooth-germ",
   "Temporomandibular joint dislocation": "hs-tmj",
   "Parotid gland": "hs-salivary",
   "Inferior alveolar nerve block": "hs-mandible",
@@ -55,7 +51,7 @@ const expect = {
 for (const [prompt, id] of Object.entries(expect)) check(selectFigures(prompt).some((f) => f.id === id), `"${prompt}" should select ${id}`);
 // generic words must not drag in the new figures
 for (const prompt of ["Early diagnosis of cancer", "Action potential", "Hypersensitivity type I: mechanism", "Right upper quadrant pain", "Molarity of a buffer"]) {
-  const bad = selectFigures(prompt).filter((f) => ["hs-ear", "hs-sarcomere", "hs-tooth", "hs-caries", "hs-dentition", "hs-tmj"].includes(f.id));
+  const bad = selectFigures(prompt).filter((f) => ["hs-ear", "hs-sarcomere", "hs-tmj"].includes(f.id));
   check(bad.length === 0, `"${prompt}" wrongly selected ${bad.map((f) => f.id)}`);
 }
 console.log(failed ? `figure library check FAILED (${failed})` : `figure library check passed (${FIGURES.length} figures)`);

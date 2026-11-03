@@ -51,7 +51,7 @@ const ExportQuery = z.object({
   // it always matches what they picked, with describeScope as a fallback
   // when it's missing.
   scopeLabel: z.string().optional(),
-  // MDCAT / BDS / SHARED (no program targeting) — only used with scopeLevel
+  // MDCAT / SHARED (no program targeting) — only used with scopeLevel
   // "program" (required there) or "year" (optional: omit for every program).
   scopeProgram: z.enum(BACKUP_PROGRAMS).optional(),
 });
@@ -62,7 +62,7 @@ router.get("/admin/mcq-backup/export", requireAdmin, async (req, res): Promise<v
   const { scopeLevel, scopeId: rawScopeId, scopeLabel, scopeProgram } = queryParsed.data;
   // A whole-program scope has no row id of its own.
   const scopeId = scopeLevel === "program" ? 0 : rawScopeId;
-  if (scopeLevel === "program" && !scopeProgram) { res.status(400).json({ error: "Choose MDCAT, BDS or Shared for a program backup" }); return; }
+  if (scopeLevel === "program" && !scopeProgram) { res.status(400).json({ error: "Choose MDCAT or Shared for a program backup" }); return; }
   if (scopeLevel && scopeId === undefined) { res.status(400).json({ error: "scopeId is required alongside scopeLevel" }); return; }
 
   try {

@@ -41,11 +41,12 @@ import { authApi, academicApi, settingsApi, uploadFile, uploadBigBook, BIG_BOOK_
 // mutations already call invalidateQueries on the specific keys they
 // change, so edits still show up immediately — this only avoids redundant
 // background refetches of data nothing has touched.
-import { CollapsibleGroup, ConfirmDialog, EmptyState, SectionHeader, DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, studyYearToNumber, groupByDegreeYear, cn } from '@/lib/shared';
+import { CollapsibleGroup, ConfirmDialog, CourseYearBadges, CourseYearPicker, EmptyState, SectionHeader, DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, studyYearToNumber, groupByDegreeYear, cn } from '@/lib/shared';
 import { queryClient } from '@/lib/query-client';
 import { renderPdfFirstPageThumbnail } from '@/lib/pdf-thumbnail';
 
-function BookEditForm({ book, onSave, onCancel, pending }: { book: AdminBook; onSave: (body: { isFree: boolean; price: number | null; currency: string | null }) => void; onCancel: () => void; pending: boolean }) {
+function BookEditForm({ book, onSave, onCancel, pending }: { book: AdminBook; onSave: (body: { isFree: boolean; price: number | null; currency: string | null; courseYearIds: number[] }) => void; onCancel: () => void; pending: boolean }) {
+  const [courseYears, setCourseYears] = useState<number[]>(book.courseYearIds ?? []);
   const [isFree, setIsFree] = useState(book.isFree);
   const [price, setPrice] = useState(book.price != null ? String(book.price) : '');
   const [currency, setCurrency] = useState(book.currency || 'PKR');
@@ -55,9 +56,10 @@ function BookEditForm({ book, onSave, onCancel, pending }: { book: AdminBook; on
       <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-edit-book-currency-${book.id}`}><option value="PKR">PKR</option><option value="USD">USD</option></select>
       <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" min="0" step="0.01" placeholder="Price (optional)" className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs" data-testid={`input-edit-book-price-${book.id}`} />
     </div>}
+    <CourseYearPicker value={courseYears} onChange={setCourseYears} testIdPrefix={`edit-book-course-year-${book.id}`} />
     <div className="flex justify-end gap-2">
       <button onClick={onCancel} className="rounded-lg px-3 py-1.5 text-[11px] font-bold text-muted-foreground hover:bg-muted" data-testid={`button-cancel-edit-book-${book.id}`}>Cancel</button>
-      <button onClick={() => onSave({ isFree, price: isFree ? null : (price ? Number(price) : null), currency: isFree ? null : currency })} disabled={pending} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-save-edit-book-${book.id}`}>{pending ? 'Saving…' : 'Save'}</button>
+      <button onClick={() => onSave({ isFree, price: isFree ? null : (price ? Number(price) : null), currency: isFree ? null : currency, courseYearIds: courseYears })} disabled={pending} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-save-edit-book-${book.id}`}>{pending ? 'Saving…' : 'Save'}</button>
     </div>
   </div>;
 }
@@ -65,6 +67,7 @@ function BookEditForm({ book, onSave, onCancel, pending }: { book: AdminBook; on
 function AdminBooks() {
   const [degree, setDegree] = useState('');
   const [studyYear, setStudyYear] = useState('');
+  const [courseYears, setCourseYears] = useState<number[]>([]);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -101,9 +104,9 @@ function AdminBooks() {
         const thumb = await renderPdfFirstPageThumbnail(file);
         if (thumb) coverPath = (await uploadFile(new File([thumb], 'cover.jpg', { type: 'image/jpeg' }), 'book')).storagePath;
       }
-      return booksAdminApi.create({ title: title.trim(), author: author.trim() || undefined, programTargetKind: degree || null, yearTargetNumber: studyYearToNumber(degree, studyYear) ?? null, storagePath: uploaded.storagePath, coverImagePath: coverPath, isFree, price: isFree ? null : (price ? Number(price) : null), currency: isFree ? null : currency });
+      return booksAdminApi.create({ title: title.trim(), author: author.trim() || undefined, programTargetKind: degree || null, yearTargetNumber: studyYearToNumber(degree, studyYear) ?? null, courseYearIds: courseYears, storagePath: uploaded.storagePath, coverImagePath: coverPath, isFree, price: isFree ? null : (price ? Number(price) : null), currency: isFree ? null : currency });
     },
-    onSuccess: () => { setUploadPct(null); invalidate(); setOpen(false); setTitle(''); setAuthor(''); setFile(null); setDriveLink(''); setCover(null); setDegree(''); setStudyYear(''); setIsFree(false); setPrice(''); toast({ title: 'Book added', description: 'Now visible to students.' }); },
+    onSuccess: () => { setUploadPct(null); invalidate(); setOpen(false); setTitle(''); setAuthor(''); setFile(null); setDriveLink(''); setCover(null); setDegree(''); setStudyYear(''); setCourseYears([]); setIsFree(false); setPrice(''); toast({ title: 'Book added', description: 'Now visible to students.' }); },
     onError: (err: unknown) => { setUploadPct(null); toast({ title: 'Could not add book', description: err instanceof ApiRequestError ? err.message : err instanceof Error ? err.message : 'Something went wrong.', variant: 'destructive' }); },
   });
   const update = useMutation({
@@ -128,7 +131,7 @@ function AdminBooks() {
     onError: (err: unknown) => toast({ title: 'Could not fix links', description: err instanceof ApiRequestError ? err.message : 'Something went wrong.', variant: 'destructive' }),
   });
 
-  // Grouped by Degree (MDCAT/BDS) then Year, same as Past papers/MDCAT mock
+  // Grouped by Degree (MDCAT) then Year, same as Past papers/MDCAT mock
   // exams — a book with no targeting set falls into "Unspecified degree" /
   // "No year set", same convention those pages use for "visible to
   // everyone".
@@ -149,6 +152,7 @@ function AdminBooks() {
           {(DEGREE_YEAR_OPTIONS[degree] || []).map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
+      <CourseYearPicker value={courseYears} onChange={setCourseYears} testIdPrefix="book-course-year" />
       <p className="text-[11px] text-muted-foreground">Leave program/year unset to make the book visible to every student.</p>
       <div className="flex items-center gap-4 rounded-xl border border-border bg-background px-3 py-2.5">
         <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} data-testid="checkbox-book-free" /> Free (no membership required)</label>
@@ -163,18 +167,18 @@ function AdminBooks() {
         <p className="mt-1 text-[11px] text-muted-foreground">In Google Drive: right-click the PDF → Share → General access → <b>Anyone with the link</b> (Viewer) → Copy link. Students read it in the app's secure reader; they never get the Drive link for paid books. No size limit from Cloudinary applies. A cover image is optional (upload one above). PDFs of 200 MB or more can also be uploaded directly with "Choose PDF": they are stored on your cPanel disk (needs the file bridge installed - see /cpanel-filebridge/README.md).</p></div>
       <button type="submit" disabled={create.isPending || !title.trim() || (!file && !driveLink.trim())} className="rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid="button-submit-book">{create.isPending ? (uploadPct !== null ? `Uploading ${Math.round(uploadPct * 100)}%…` : 'Uploading…') : 'Add book'}</button>
     </form>}
-    {/* Grouped by Degree (MDCAT/BDS) then Year, same classification Past
+    {/* Grouped by Degree (MDCAT) then Year, same classification Past
         papers and MDCAT mock exams use — a book with no program/year set
         falls under "Unspecified degree" / "No year set", which doubles as
         a quick way to see at a glance how many books are currently
         visible to everyone rather than scoped to a year, since that's
         opt-in per the hint above and easy to forget. */}
-    {books.length ? bookGroups.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' || g.degree === 'BDS' ? `${g.degree} colleges` : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`books-degree-${g.degree || 'unspecified'}`}>
-      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen title={yg.year ? [yg.year, (g.degree === 'MDCAT' || g.degree === 'BDS') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`books-year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
+    {books.length ? bookGroups.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' ? 'MDCAT' : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`books-degree-${g.degree || 'unspecified'}`}>
+      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen title={yg.year ? [yg.year, (g.degree === 'MDCAT') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`books-year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{yg.items.map((b) => <div key={b.id} className="rounded-2xl border border-border bg-card p-4" data-testid={`card-book-${b.id}`}>
           {b.coverImagePath && <img src={resolveUploadUrl(b.coverImagePath) ?? undefined} alt="" loading="lazy" decoding="async" className="mb-3 h-32 w-full rounded-lg object-cover" />}
           <div className="flex items-start justify-between gap-2">
-            <div><p className="text-sm font-bold leading-5">{b.title}</p>{b.author && <p className="mt-1 text-xs text-muted-foreground">{b.author}</p>}</div>
+            <div><p className="text-sm font-bold leading-5">{b.title}</p>{b.author && <p className="mt-1 text-xs text-muted-foreground">{b.author}</p>}{!!b.courseYearIds?.length && <div className="mt-1.5 flex flex-wrap gap-1"><CourseYearBadges ids={b.courseYearIds} /></div>}</div>
             <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold', b.isFree ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')} data-testid={`text-book-tier-${b.id}`}>{b.isFree ? 'Free' : b.price != null ? `${b.currency ?? ''} ${b.price}`.trim() : 'Paid'}</span>
           </div>
           {editingId === b.id ? <BookEditForm book={b} onSave={(body) => update.mutate({ id: b.id, body })} onCancel={() => setEditingId(null)} pending={update.isPending} /> : <div className="mt-3 flex items-center justify-between">

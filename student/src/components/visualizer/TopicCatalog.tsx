@@ -9,7 +9,7 @@ import { cn } from '@/lib/shared';
 const PAGE = 30;
 
 export default function TopicCatalog({ onPick, disabled }: { onPick: (prompt: string) => void; disabled?: boolean }) {
-  const [program, setProgram] = useState<'' | 'MDCAT' | 'BDS'>('');
+  const program: '' | 'MDCAT' = '';
   const [discipline, setDiscipline] = useState('');
   const [group, setGroup] = useState('');
   const [text, setText] = useState('');
@@ -29,9 +29,6 @@ export default function TopicCatalog({ onPick, disabled }: { onPick: (prompt: st
   return <div className="rounded-2xl border border-border bg-card p-4" data-testid="panel-visualizer-catalog">
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-[12rem] flex-1"><Search size={14} className="absolute left-3 top-3 text-muted-foreground" /><input value={text} onChange={(e) => setText(e.target.value)} placeholder={`Search ${d ? d.totalAll.toLocaleString() : ''} topics, e.g. brachial plexus, warfarin, rickets…`} className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/20" aria-label="Search topics" data-testid="input-visualizer-catalog-search" /></div>
-      <select value={program} onChange={(e) => { setProgram(e.target.value as typeof program); setDiscipline(''); setGroup(''); }} className="h-10 rounded-xl border border-border bg-background px-3 text-xs font-semibold" aria-label="Program" data-testid="select-visualizer-catalog-program">
-        <option value="">MDCAT + BDS</option><option value="MDCAT">MDCAT</option><option value="BDS">BDS</option>
-      </select>
     </div>
     <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Disciplines">
       <button role="tab" aria-selected={!discipline} onClick={() => { setDiscipline(''); setGroup(''); }} className={cn('shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-bold', !discipline ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:bg-muted')}>All</button>

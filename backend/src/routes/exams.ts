@@ -3,28 +3,28 @@ import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db, examsTable, examQuestionsTable, examAttemptsTable, examAnswersTable, mcqsTable, usersTable, auditLogsTable } from "@workspace/db";
 import { requireAuth, requireAdmin, requireMembershipFor, isAdminRole } from "../middlewares/auth";
-import { getStudentTargeting, notifyTargetedStudents } from "../lib/contentVisibility";
+import { courseYearAllows, getStudentTargeting, notifyTargetedStudents, type StudentTargeting } from "../lib/contentVisibility";
 import { deleteMcqsEverywhere } from "../lib/mcqCascade";
 
 const router: IRouter = Router();
 
-function isEligible(exam: typeof examsTable.$inferSelect, targeting: { programKind: string | null; yearNumber: number | null }): boolean {
+function isEligible(exam: typeof examsTable.$inferSelect, targeting: StudentTargeting): boolean {
   const programOk = !exam.programTargetKind || exam.programTargetKind === targeting.programKind;
   const yearOk = !exam.yearTargetNumber || exam.yearTargetNumber === targeting.yearNumber;
-  return programOk && yearOk;
+  return programOk && yearOk && courseYearAllows(exam.courseYearIds, targeting);
 }
 
 function examStudentView(exam: typeof examsTable.$inferSelect) {
   return {
     id: exam.id, title: exam.title, description: exam.description,
-    programTargetKind: exam.programTargetKind, yearTargetNumber: exam.yearTargetNumber,
+    programTargetKind: exam.programTargetKind, yearTargetNumber: exam.yearTargetNumber, courseYearIds: exam.courseYearIds ?? [],
     durationMinutes: exam.durationMinutes, startAt: exam.startAt.toISOString(), endAt: exam.endAt.toISOString(),
     maxAttempts: exam.maxAttempts, negativeMarkingEnabled: exam.negativeMarkingEnabled, negativeMarkPerWrong: Number(exam.negativeMarkPerWrong),
     passingPercent: exam.passingPercent ? Number(exam.passingPercent) : null, status: exam.status,
   };
 }
 
-// Auto-notifies the same MDCAT/BDS + year audience a published exam is
+// Auto-notifies the same MDCAT + year audience a published exam is
 // actually visible to (see isEligible above / notifyTargetedStudents in
 // contentVisibility.ts) — fired once, the moment an exam first becomes
 // status="published", from either POST /admin/exams (created directly as
@@ -38,6 +38,7 @@ async function notifyExamPublished(actorId: number, exam: typeof examsTable.$inf
     "New MDCAT mock exam available",
     `"${exam.title}" has just been published — check it out under MDCAT Mock Exams.`,
     "info",
+    exam.courseYearIds ?? [],
   );
   await db.insert(auditLogsTable).values({ actorId, action: "NOTIFICATION_AUTO_EXAM", entity: "exam", entityId: exam.id, metadata: JSON.stringify({ scope: scopeLabel, notified }) });
 }
@@ -75,6 +76,7 @@ const ExamBody = z.object({
   description: z.string().max(2000).optional(),
   programTargetKind: z.string().max(40).nullable().optional(),
   yearTargetNumber: z.number().int().min(1).max(5).nullable().optional(),
+  courseYearIds: z.array(z.number().int().positive()).max(20).optional(),
   durationMinutes: z.number().int().min(1).max(600).optional(),
   startAt: z.string().min(1),
   endAt: z.string().min(1),
@@ -98,6 +100,7 @@ router.post("/admin/exams", requireAdmin, async (req, res): Promise<void> => {
     title: data.title, description: data.description ?? "",
     programTargetKind: data.programTargetKind ? data.programTargetKind.trim().toUpperCase() : null,
     yearTargetNumber: data.yearTargetNumber ?? null,
+    courseYearIds: [...new Set(data.courseYearIds ?? [])],
     durationMinutes: data.durationMinutes ?? 60, startAt: new Date(data.startAt), endAt: new Date(data.endAt),
     maxAttempts: data.maxAttempts ?? 1, negativeMarkingEnabled: data.negativeMarkingEnabled ?? false,
     negativeMarkPerWrong: String(data.negativeMarkPerWrong ?? 0), passingPercent: data.passingPercent != null ? String(data.passingPercent) : null,
@@ -122,11 +125,12 @@ router.patch("/admin/exams/:id", requireAdmin, async (req, res): Promise<void> =
   const parsed = ExamBody.partial().safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid request" }); return; }
   const [before] = await db.select().from(examsTable).where(eq(examsTable.id, id));
-  const { programTargetKind, yearTargetNumber, startAt, endAt, negativeMarkPerWrong, passingPercent, ...rest } = parsed.data;
+  const { programTargetKind, yearTargetNumber, courseYearIds, startAt, endAt, negativeMarkPerWrong, passingPercent, ...rest } = parsed.data;
   const [exam] = await db.update(examsTable).set({
     ...rest,
     ...(programTargetKind !== undefined ? { programTargetKind: programTargetKind ? programTargetKind.trim().toUpperCase() : null } : {}),
     ...(yearTargetNumber !== undefined ? { yearTargetNumber } : {}),
+    ...(courseYearIds !== undefined ? { courseYearIds: [...new Set(courseYearIds)] } : {}),
     ...(startAt !== undefined ? { startAt: new Date(startAt) } : {}),
     ...(endAt !== undefined ? { endAt: new Date(endAt) } : {}),
     ...(negativeMarkPerWrong !== undefined ? { negativeMarkPerWrong: String(negativeMarkPerWrong) } : {}),
@@ -250,7 +254,7 @@ router.post("/admin/exams/:id/release-all", requireAdmin, async (req, res): Prom
 router.get("/exams", requireAuth, requireMembershipFor("exams"), async (req, res): Promise<void> => {
   const isAdmin = isAdminRole(req.user!.role);
   const rows = await db.select().from(examsTable).where(eq(examsTable.status, "published"));
-  const targeting = isAdmin ? { programKind: null, yearNumber: null } : await getStudentTargeting(req.user!.id);
+  const targeting: StudentTargeting = isAdmin ? { programKind: null, yearNumber: null, courseYearId: null } : await getStudentTargeting(req.user!.id);
   const eligible = isAdmin ? rows : rows.filter((e) => isEligible(e, targeting));
 
   const myAttempts = await db.select().from(examAttemptsTable).where(eq(examAttemptsTable.userId, req.user!.id));

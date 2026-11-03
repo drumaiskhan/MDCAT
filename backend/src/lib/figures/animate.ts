@@ -245,11 +245,7 @@ export const ANIMATION_NOTES: Record<string, string> = {
   "hs-nephron": "ALREADY ANIMATED: blood in the afferent arteriole and yellow filtrate flowing through the whole tubule to the collecting duct (--hs-flow:Xs).",
   "hs-skin": "ALREADY ANIMATED: sweat rises up the eccrine duct to the pore (--hs-flow:Xs).",
   "hs-villus": "ALREADY ANIMATED: absorbed fat moves down the central lacteal and nutrients down the capillary (--hs-flow:Xs).",
-  // v105: dental and more systems
-  "hs-tooth": "ALREADY ANIMATED: blood dots rise up the root canal from the apical foramen (--hs-flow:Xs). The rest is a still picture.",
-  "hs-caries": "Still picture (no built-in motion): you can pulse the lesion zone you are explaining.",
-  "hs-dentition": "Still picture: the teeth do not move; highlight a tooth type by drawing a ring/arrow at its landmark coordinates.",
-  "hs-tooth-germ": "Still picture: add your own stage highlight (e.g. pulse the inner enamel epithelium layer).",
+  // v105: more systems
   "hs-tmj": "ALREADY ANIMATED: the mouth opens and closes - the condyle rotates then translates forward-and-down under the articular eminence and the disc glides with it (--hs-jaw:Xs = seconds per open/close cycle). Landmark coordinates in the notes are for the CLOSED position.",
   "hs-tongue": "Still picture: no built-in motion.",
   "hs-salivary": "ALREADY ANIMATED: saliva dots flow along Stensen's duct and Wharton's duct towards the mouth (--hs-flow:Xs sets the pace).",

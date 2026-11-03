@@ -147,7 +147,7 @@ export interface StudentSummary { id: number; name: string; email: string; insti
 export interface StudentDetail {
   id: number; name: string; email: string; phone: string | null; rollNumber: string | null; status: string; statusMessage: string | null; emailVerified: boolean;
   institution: string | null; program: string | null; academicYear: string | null; batch: string | null;
-  institutionId?: number | null; programKind?: 'MDCAT' | 'BDS' | null; yearNumber?: number | null;
+  institutionId?: number | null; programKind?: 'MDCAT' | null; yearNumber?: number | null;
   progress?: number; currentStreak: number; longestStreak: number; lastPracticeDate?: string | null; lastLoginAt: string | null; joinedAt: string;
   payments: PaymentRow[]; activeMembership: { expiresAt: string; isTrial: boolean } | null;
 }
@@ -270,32 +270,32 @@ export const teamApi = {
   removePermanent: (id: number) => request<{ ok: true }>(`/admin/team-members/${id}/permanent`, { method: 'DELETE' }),
 };
 
-export interface AdminModule { id: number; name: string; subtitle: string; subjectCount: number; topicCount: number; progress: number; active: boolean; blockId?: number | null; blockName?: string | null; displayOrder?: number; iconUrl?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; targetingLabel?: string }
+export interface AdminModule { id: number; name: string; subtitle: string; subjectCount: number; topicCount: number; progress: number; active: boolean; blockId?: number | null; blockName?: string | null; displayOrder?: number; iconUrl?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[]; targetingLabel?: string }
 
 export const moduleAdminApi = {
   listAll: () => request<AdminModule[]>('/modules'),
-  create: (body: { name: string; subtitle: string; active?: boolean; blockId?: number | null; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null }) =>
+  create: (body: { name: string; subtitle: string; active?: boolean; blockId?: number | null; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[] }) =>
     request<AdminModule>('/modules', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; blockId: number | null; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null }>) =>
+  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; blockId: number | null; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds: number[] }>) =>
     request<AdminModule>(`/modules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/modules/${id}`, { method: 'DELETE' }),
   removePermanent: (id: number) => request<{ ok: true }>(`/modules/${id}/permanent`, { method: 'DELETE' }),
 };
 
-export interface AdminBlock { id: number; name: string; subtitle: string; iconUrl: string | null; displayOrder: number; active: boolean; programTargetKind?: string | null; yearTargetNumber?: number | null; targetingLabel?: string }
+export interface AdminBlock { id: number; name: string; subtitle: string; iconUrl: string | null; displayOrder: number; active: boolean; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[]; targetingLabel?: string }
 
 export const blockAdminApi = {
   listAll: () => request<AdminBlock[]>('/blocks'),
-  create: (body: { name: string; subtitle?: string; active?: boolean; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null }) =>
+  create: (body: { name: string; subtitle?: string; active?: boolean; iconPath?: string | null; displayOrder?: number; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[] }) =>
     request<AdminBlock>('/blocks', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null }>) =>
+  update: (id: number, body: Partial<{ name: string; subtitle: string; active: boolean; iconPath: string | null; displayOrder: number; programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds: number[] }>) =>
     request<AdminBlock>(`/blocks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/blocks/${id}`, { method: 'DELETE' }),
   removePermanent: (id: number) => request<{ ok: true }>(`/blocks/${id}/permanent`, { method: 'DELETE' }),
 };
 
 export interface Exam {
-  id: number; title: string; description: string; programTargetKind: string | null; yearTargetNumber: number | null;
+  id: number; title: string; description: string; programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds?: number[];
   durationMinutes: number; startAt: string; endAt: string; maxAttempts: number; negativeMarkingEnabled: boolean;
   negativeMarkPerWrong: number; passingPercent: number | null; resultReleaseMode: 'immediate' | 'after_end' | 'manual';
   showMarks: boolean; showPercentage: boolean; showCorrectAnswers: boolean; status: 'draft' | 'published' | 'archived';
@@ -462,7 +462,7 @@ export const examsApi = {
 export const studentsAdminApi = {
   detail: (id: number) => request<StudentDetail>(`/students/${id}`),
   challenges: (id: number) => request<{ sent: StudentChallengeRow[]; received: StudentChallengeRow[] }>(`/students/${id}/challenges`),
-  update: (id: number, body: Partial<{ name: string; email: string; phone: string; rollNumber: string; institutionId: number; programKind: 'MDCAT' | 'BDS'; yearNumber: number }>) => request<{ ok: true }>(`/students/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; email: string; phone: string; rollNumber: string; institutionId: number; programKind: 'MDCAT'; yearNumber: number }>) => request<{ ok: true }>(`/students/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   updateStatus: (id: number, status: string, emailVerified?: boolean, message?: string) => request<{ ok: true; status: string; emailVerified: boolean; statusMessage: string | null }>(`/students/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, ...(emailVerified !== undefined ? { emailVerified } : {}), ...(message !== undefined ? { message } : {}) }) }),
   verifyEmail: (id: number) => request<{ ok: true; status: string; emailVerified: boolean }>(`/students/${id}/verify-email`, { method: 'POST' }),
   restoreStreak: (id: number, body: { mode: 'rebuild' } | { mode: 'set'; currentStreak: number; longestStreak?: number }) => request<{ ok: true; currentStreak: number; longestStreak: number; lastPracticeDate: string | null }>(`/students/${id}/streak/restore`, { method: 'POST', body: JSON.stringify(body) }),
@@ -639,7 +639,7 @@ export const mcqImportApi = {
 // Level 'program' = every year of one program (id is unused, 0). Level 'year'
 // may also carry a `program` so "Year 2" can mean "MDCAT Year 2". 'SHARED' is
 // content with no program targeting (visible to MDCAT alike).
-export type BackupProgram = 'MDCAT' | 'BDS' | 'SHARED';
+export type BackupProgram = 'MDCAT' | 'SHARED';
 export interface BackupScope { level: 'program' | 'year' | 'block' | 'module' | 'subject' | 'topic'; id: number; label: string; program?: BackupProgram }
 function backupScopeQuery(scope?: BackupScope | null): string {
   if (!scope) return '';
@@ -872,7 +872,7 @@ export const fullBackupApi = {
 // scripts/mysql-restore CLI tool, never of api-server itself). See
 // AdminDatabaseBackup.tsx's top-of-file comment for the full story.
 
-export interface PastPaper { id: number; title: string; examBoard: string; year: string; level: string; active: boolean; archived?: boolean; displayOrder: number; mcqCount: number; programId: number | null; academicYearId: number | null; programTargetKind: string | null; yearTargetNumber: number | null }
+export interface PastPaper { id: number; title: string; examBoard: string; year: string; level: string; active: boolean; archived?: boolean; displayOrder: number; mcqCount: number; programId: number | null; academicYearId: number | null; programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds?: number[] }
 export interface NotebookEntry { id: number; userId: number; mcqId: number | null; title: string; content: string; createdAt: string; updatedAt: string }
 export interface SavedSession { id: number; userId: number; name: string; config: Record<string, unknown>; createdAt: string }
 export interface FlaggedMcq { id: number; userId: number; mcqId: number; reason: string; status: 'open' | 'resolved'; createdAt: string; question: string | null; path: string | null; mcqDeleted: boolean }
@@ -887,7 +887,7 @@ export interface PaymentDetails { PAYMENT_INSTRUCTIONS: string; PAYMENT_ACCOUNT_
 // ---------------------------------------------------------------------------
 
 export const authApi = {
-  register: (body: { name: string; email: string; password: string; phone: string; rollNumber?: string; institutionId: number; programKind: 'MDCAT' | 'BDS'; yearNumber: number; planId: number; method?: string; reference?: string; paymentDate?: string; proofPath?: string }) =>
+  register: (body: { name: string; email: string; password: string; phone: string; rollNumber?: string; institutionId: number; programKind: 'MDCAT'; yearNumber: number; planId: number; method?: string; reference?: string; paymentDate?: string; proofPath?: string }) =>
     request<{ user: AuthUser; message: string }>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   adminRegister: (body: { name: string; email: string; password: string; inviteCode: string }) =>
     request<{ token: string; user: AuthUser }>('/auth/admin/register', { method: 'POST', body: JSON.stringify(body) }),
@@ -1043,7 +1043,7 @@ export const auditApi = {
   list: (limit = 100) => request<AuditLogEntry[]>(`/admin/audit-logs?limit=${limit}`),
 };
 
-export interface AdminBook { id: number; title: string; author: string | null; moduleId: number | null; subjectId: number | null; topicId: number | null; programTargetKind: string | null; yearTargetNumber: number | null; storagePath: string | null; coverImagePath: string | null; active: boolean; isFree: boolean; price: number | null; currency: string | null }
+export interface AdminBook { id: number; title: string; author: string | null; moduleId: number | null; subjectId: number | null; topicId: number | null; programTargetKind: string | null; yearTargetNumber: number | null; courseYearIds?: number[]; storagePath: string | null; coverImagePath: string | null; active: boolean; isFree: boolean; price: number | null; currency: string | null }
 export interface AdminCoupon { id: number; code: string; discountType: 'percent' | 'fixed'; discountValue: number; active: boolean; maxUses: number | null; usedCount: number; expiresAt: string | null; createdAt: string }
 export const couponsAdminApi = {
   list: () => request<AdminCoupon[]>('/coupons'),
@@ -1064,8 +1064,8 @@ export const bookPurchasesAdminApi = {
 
 export const booksAdminApi = {
   list: () => request<AdminBook[]>('/admin/books'),
-  create: (body: { title: string; author?: string; programTargetKind?: string | null; yearTargetNumber?: number | null; storagePath: string; coverImagePath?: string; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>('/books', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: { title?: string; author?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  create: (body: { title: string; author?: string; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[]; storagePath: string; coverImagePath?: string; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>('/books', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: { title?: string; author?: string | null; programTargetKind?: string | null; yearTargetNumber?: number | null; courseYearIds?: number[]; isFree?: boolean; price?: number | null; currency?: string | null }) => request<AdminBook>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/books/${id}`, { method: 'DELETE' }),
   removePermanent: (id: number) => request<{ ok: true; warning?: string }>(`/admin/books/${id}/permanent`, { method: 'DELETE' }),
   backfillLinks: () => request<{ fixed: number; skipped: number; failed: number }>('/admin/books/backfill-links', { method: 'POST' }),
@@ -1184,7 +1184,7 @@ export interface AiVisualizerLogEntry {
 export interface AiVisualizerLibraryEntry { id: number; prompt: string; title: string; hits: number; version: number; lastUsedAt: string | null; createdAt: string; bytes: number; source: 'catalog' | 'custom' }
 export interface AiVisualizerLibraryPage { entries: AiVisualizerLibraryEntry[]; matched: number; offset: number; limit: number; count: number; totalReuses: number; catalogSaved: number; customSaved: number }
 export interface AiVisualizerLibraryParams { q?: string; sort?: 'hits' | 'recent' | 'size' | 'oldest'; source?: 'all' | 'catalog' | 'custom'; limit?: number; offset?: number }
-export interface AiVisualizerCatalogCoverage { total: number; saved: number; disciplines: Array<{ id: string; name: string; program: 'MDCAT' | 'BDS' | 'Both'; total: number; saved: number; reuses: number; groups: Array<{ name: string; total: number; saved: number }> }> }
+export interface AiVisualizerCatalogCoverage { total: number; saved: number; disciplines: Array<{ id: string; name: string; program: 'MDCAT' | 'Both'; total: number; saved: number; reuses: number; groups: Array<{ name: string; total: number; saved: number }> }> }
 export interface AiVisualizerPregenStatus {
   running: boolean; stopping: boolean; startedAt: number | null; finishedAt: number | null;
   scope: { discipline: string | null; group: string | null; limit: number | null; concurrency: number };

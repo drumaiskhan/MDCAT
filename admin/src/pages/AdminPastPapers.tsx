@@ -41,7 +41,7 @@ import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiReq
 // mutations already call invalidateQueries on the specific keys they
 // change, so edits still show up immediately — this only avoids redundant
 // background refetches of data nothing has touched.
-import { DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, McqTreeModule, SectionHeader, groupByDegreeYear, studyYearToNumber, BrandSpinner, CollapsibleGroup, ConfirmDialog, EmptyState, PastPaperEditForm, PastPaperQuestionsList, PastPaperUploader, cn } from '@/lib/shared';
+import { CourseYearBadges, CourseYearPicker, DEGREE_OPTIONS, DEGREE_YEAR_OPTIONS, McqTreeModule, SectionHeader, groupByDegreeYear, studyYearToNumber, BrandSpinner, CollapsibleGroup, ConfirmDialog, EmptyState, PastPaperEditForm, PastPaperQuestionsList, PastPaperUploader, cn } from '@/lib/shared';
 import { queryClient } from '@/lib/query-client';
 
 // Past papers have their own backup & restore, separate from the MCQ bank
@@ -133,9 +133,10 @@ function AdminPastPapers() {
   const [formProgramId, setFormProgramId] = useState('');
   const [formDegree, setFormDegree] = useState('');
   const [formStudyYear, setFormStudyYear] = useState('');
+  const [formCourseYears, setFormCourseYears] = useState<number[]>([]);
   const programsQ = useQuery({ queryKey: ['admin-programs-flat'], queryFn: () => academicApi.programs(undefined, true) });
   const academicYearsQ = useQuery({ queryKey: ['admin-academic-years-flat', formProgramId], queryFn: () => academicApi.academicYears(formProgramId ? Number(formProgramId) : undefined, true) });
-  const resetForm = () => { setOpen(false); setFormProgramId(''); setFormDegree(''); setFormStudyYear(''); };
+  const resetForm = () => { setOpen(false); setFormProgramId(''); setFormDegree(''); setFormStudyYear(''); setFormCourseYears([]); };
   const composedLevel = [formDegree, formStudyYear].filter(Boolean).join(' - ');
   // Every college code that's already been typed into a paper (the "KMU" /
   // "WMC" / "NWSM" etc. in the exam-board field, which is what's actually
@@ -143,7 +144,7 @@ function AdminPastPapers() {
   // so the same college is always spelled the same way, instead of drifting
   // into near-duplicates that would then group/filter inconsistently.
   const collegeOptions = Array.from(new Set((papers.data || []).map((p) => p.examBoard).filter(Boolean))).sort();
-  // Classified into MDCAT / BDS, then by study year (1st Year … Final Year)
+  // Classified into MDCAT, then by study year (1st Year … Final Year)
   // instead of the paper's calendar Year field — the study year is what an
   // admin actually thinks in terms of when uploading a batch ("here are
   // all of First Year's papers"), and it's already captured by the same
@@ -167,12 +168,12 @@ function AdminPastPapers() {
   return <div><SectionHeader eyebrow="Content" title="Past papers" action={<div className="flex gap-2"><button onClick={() => backfillYearTargeting.mutate()} disabled={backfillYearTargeting.isPending} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-extrabold text-muted-foreground hover:text-foreground disabled:opacity-50" data-testid="button-backfill-paper-year-targeting" title="Fix old papers whose Level label (e.g. &quot;MDCAT - 1st Year&quot;) was never turned into real year/degree targeting, so they show up for every year">{backfillYearTargeting.isPending ? 'Checking…' : 'Fix year targeting'}</button><button onClick={() => setOpen(true)} className="btn-pop inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-foreground shadow-sm" data-testid="button-create-paper"><Plus size={15} /> Add paper</button></div>} />
     <PastPaperBackupPanel papers={(papers.data ?? []).map((p) => ({ id: p.id, title: p.title }))} />
     <datalist id="past-paper-college-options">{collegeOptions.map((c) => <option key={c} value={c} />)}</datalist>
-    {open && <form onSubmit={(e) => { e.preventDefault(); if (!formDegree || !formStudyYear) { toast({ title: 'Degree and year required', description: 'Pick both so this paper only shows to the right students — leaving them blank is what made First Year papers show up for Third Year.', variant: 'destructive' }); return; } const f = new FormData(e.currentTarget); const programId = f.get('programId') ? Number(f.get('programId')) : undefined; const academicYearId = f.get('academicYearId') ? Number(f.get('academicYearId')) : undefined; const level = String(f.get('level') || '') || composedLevel; create.mutate({ title: String(f.get('title')), examBoard: String(f.get('examBoard') || ''), year: String(f.get('year') || ''), level, programId, academicYearId, programTargetKind: formDegree || null, yearTargetNumber: studyYearToNumber(formDegree, formStudyYear) ?? null, active: true }, { onSuccess: resetForm }); }} className="mb-5 grid gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 sm:p-5 md:grid-cols-4">
+    {open && <form onSubmit={(e) => { e.preventDefault(); if (!formDegree || !formStudyYear) { toast({ title: 'Degree and year required', description: 'Pick both so this paper only shows to the right students — leaving them blank is what made First Year papers show up for Third Year.', variant: 'destructive' }); return; } const f = new FormData(e.currentTarget); const programId = f.get('programId') ? Number(f.get('programId')) : undefined; const academicYearId = f.get('academicYearId') ? Number(f.get('academicYearId')) : undefined; const level = String(f.get('level') || '') || composedLevel; create.mutate({ title: String(f.get('title')), examBoard: String(f.get('examBoard') || ''), year: String(f.get('year') || ''), level, programId, academicYearId, programTargetKind: formDegree || null, yearTargetNumber: studyYearToNumber(formDegree, formStudyYear) ?? null, courseYearIds: formCourseYears, active: true }, { onSuccess: resetForm }); }} className="mb-5 grid gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 sm:p-5 md:grid-cols-4">
       <input required name="title" placeholder="Paper title, e.g. Block A" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid="input-paper-title" />
       <input name="examBoard" list="past-paper-college-options" placeholder="College, e.g. KMU" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid="input-paper-board" />
       <input name="year" placeholder="Year, e.g. 2024" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid="input-paper-year" />
 
-      {/* Priority fields: a proper MDCAT/BDS degree selector plus a matching
+      {/* Priority fields: a proper MDCAT degree selector plus a matching
           study-year selector, so admins aren't stuck typing a free-text
           level label. These two combine into the Level field below
           automatically (e.g. "MDCAT - 3rd Year"), which is what's shown to
@@ -202,13 +203,14 @@ function AdminPastPapers() {
             Both are now required so a new paper can't be saved untargeted
             by accident. */}
         <p className="mt-2 text-[11px] font-semibold text-accent-text">Both are required — leaving either blank makes this paper visible to every year, which is the bug this fixes.</p>
+        <CourseYearPicker value={formCourseYears} onChange={setFormCourseYears} testIdPrefix="paper-course-year" className="mt-3" />
       </div>
 
       <select name="programId" value={formProgramId} onChange={(e) => setFormProgramId(e.target.value)} className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid="select-paper-program"><option value="">All programs (advanced targeting, optional)</option>{(programsQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
       <select name="academicYearId" disabled={!formProgramId} className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 disabled:opacity-50 md:col-span-2" data-testid="select-paper-academic-year"><option value="">All years</option>{(academicYearsQ.data || []).map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select>
-      {/* This dropdown only lists MDCAT/BDS-type Programs that have actually
+      {/* This dropdown only lists MDCAT-type Programs that have actually
           been added under an institution in Colleges & courses — it isn't
-          pre-seeded with MDCAT/BDS, since a Program has to belong to a
+          pre-seeded with MDCAT, since a Program has to belong to a
           specific institution. Both selects here are optional extra
           targeting (narrows which students see the paper); the Degree +
           Year picker above already covers labeling and student-facing
@@ -223,14 +225,14 @@ function AdminPastPapers() {
 
     {!papers.data?.length && <EmptyState icon={FileStack} title="No past papers yet" body="Add a paper, then upload its questions or attach them from the MCQ bank." />}
 
-    {/* Classified into MDCAT / BDS, then by study year — see the grouping
+    {/* Classified into MDCAT, then by study year — see the grouping
         setup above — and collapsible the same way the MCQ bank's Module ->
         Subject -> Topic tree is (McqTreeModule), so a long list of papers
         across many years doesn't turn into one endless scroll. */}
-    {grouped.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' || g.degree === 'BDS' ? `${g.degree} colleges` : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`degree-${g.degree || 'unspecified'}`}>
-      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen={false} title={yg.year ? [yg.year, (g.degree === 'MDCAT' || g.degree === 'BDS') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
+    {grouped.map((g) => <CollapsibleGroup key={g.degree || 'unspecified'} defaultOpen icon={<GraduationCap size={14} />} title={g.degree === 'MDCAT' ? 'MDCAT' : 'Unspecified degree'} count={g.groups.reduce((sum, yg) => sum + yg.items.length, 0)} testId={`degree-${g.degree || 'unspecified'}`}>
+      {g.groups.map((yg) => <CollapsibleGroup key={yg.year || 'no-year'} defaultOpen={false} title={yg.year ? [yg.year, (g.degree === 'MDCAT') ? g.degree : ''].filter(Boolean).join(' ') : 'No year set'} count={yg.items.length} nested testId={`year-${g.degree || 'unspecified'}-${yg.year || 'no-year'}`}>
         <div className="rounded-2xl border border-border bg-card">{yg.items.map((p) => <div key={p.id} className="border-b border-border p-5 last:border-0" data-testid={`row-admin-paper-${p.id}`}>
-          <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:gap-4"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-info/15 text-info"><FileStack size={17} /></div><div className="min-w-[160px] flex-1"><div className="text-sm font-bold">{p.title}</div><div className="mt-1 text-xs text-muted-foreground">{[p.examBoard, p.year, p.level].filter(Boolean).join(' · ')} · {p.mcqCount} MCQs linked</div></div><div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:gap-4"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-info/15 text-info"><FileStack size={17} /></div><div className="min-w-[160px] flex-1"><div className="text-sm font-bold">{p.title}</div><div className="mt-1 text-xs text-muted-foreground">{[p.examBoard, p.year, p.level].filter(Boolean).join(' · ')} · {p.mcqCount} MCQs linked</div>{!!p.courseYearIds?.length && <div className="mt-1.5 flex flex-wrap gap-1"><CourseYearBadges ids={p.courseYearIds} /></div>}</div><div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setViewingId(viewingId === p.id ? null : p.id)} className={cn('btn-pop inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold', viewingId === p.id ? 'bg-primary/10 text-primary' : 'border border-border text-muted-foreground hover:bg-muted')} data-testid={`button-view-paper-questions-${p.id}`}><CircleHelp size={12} /> View questions</button>
             <button onClick={() => setUploadingId(uploadingId === p.id ? null : p.id)} className={cn('btn-pop inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold', uploadingId === p.id ? 'bg-primary/10 text-primary' : 'border border-border text-muted-foreground hover:bg-muted')} data-testid={`button-upload-paper-${p.id}`}><UploadCloud size={12} /> Upload questions</button>
             <button onClick={() => setEditingId(editingId === p.id ? null : p.id)} className={cn('btn-pop inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold', editingId === p.id ? 'bg-primary/10 text-primary' : 'border border-border text-muted-foreground hover:bg-muted')} data-testid={`button-edit-paper-${p.id}`}><Pencil size={12} /> Edit</button>
