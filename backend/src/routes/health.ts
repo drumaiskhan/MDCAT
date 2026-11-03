@@ -1,3 +1,4 @@
+
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 
@@ -10,9 +11,9 @@ router.get("/healthz", (_req, res) => {
 
   res.json({
     ...data,
-    version: "__DEPLOY_COMMIT__",
-    deployedAt: "__DEPLOYED_AT__",
-    deploymentId: "__DEPLOY_RUN_ID__",
+    version: process.env.DEPLOY_COMMIT || "unknown",
+    deployedAt: process.env.DEPLOYED_AT || "unknown",
+    deploymentId: process.env.DEPLOY_RUN_ID || "unknown",
   });
 });
 

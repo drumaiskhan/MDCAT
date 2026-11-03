@@ -50,6 +50,7 @@ import {
   subjectsTable,
   practiceAttemptsTable,
   topicsTable,
+  chaptersTable,
   mcqsTable,
   flashcardsTable,
   resourcesTable,
@@ -737,6 +738,7 @@ router.delete("/modules/:id/permanent", requireAdmin, async (req, res): Promise<
   await db.update(mcqsTable).set({ moduleId: null, subjectId: null, topicId: null }).where(eq(mcqsTable.moduleId, id));
   await db.update(flashcardsTable).set({ moduleId: null, subjectId: null, topicId: null }).where(eq(flashcardsTable.moduleId, id));
   if (subjectIds.length) await db.delete(topicsTable).where(inArray(topicsTable.subjectId, subjectIds));
+  if (subjectIds.length) await db.delete(chaptersTable).where(inArray(chaptersTable.subjectId, subjectIds));
   await db.delete(subjectsTable).where(eq(subjectsTable.moduleId, id));
   await db.delete(modulesTable).where(eq(modulesTable.id, id));
 
@@ -830,6 +832,7 @@ router.delete("/subjects/:id", requireAdmin, async (req, res): Promise<void> => 
   const id = Number(req.params.id);
   const [row] = await db.update(subjectsTable).set({ active: false, archived: true }).where(eq(subjectsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Subject not found" }); return; }
+  await db.update(chaptersTable).set({ active: false, archived: true }).where(eq(chaptersTable.subjectId, id));
   res.json({ ok: true });
 });
 
@@ -847,7 +850,7 @@ router.get("/topics", requireAuth, async (req, res): Promise<void> => {
     const [subject] = await db.select().from(subjectsTable).where(eq(subjectsTable.id, params.data.subjectId));
     if (!subject || !visibleModuleIds!.includes(subject.moduleId)) { res.json([]); return; }
   }
-  const rows = await db.select({ id: topicsTable.id, subjectId: topicsTable.subjectId, name: topicsTable.name, moduleId: subjectsTable.moduleId, displayOrder: topicsTable.displayOrder })
+  const rows = await db.select({ id: topicsTable.id, subjectId: topicsTable.subjectId, chapterId: topicsTable.chapterId, name: topicsTable.name, moduleId: subjectsTable.moduleId, displayOrder: topicsTable.displayOrder })
     .from(topicsTable).innerJoin(subjectsTable, eq(topicsTable.subjectId, subjectsTable.id))
     .where(and(
       // Same bug/fix as GET /subjects just above: delete never actually
@@ -869,26 +872,36 @@ router.get("/topics", requireAuth, async (req, res): Promise<void> => {
       .groupBy(mcqsTable.topicId);
     for (const row of countRows) if (row.topicId != null) countsByTopic.set(row.topicId, Number(row.count));
   }
-  res.json(ListTopicsResponse.parse(rows.map((row) => ({ id: row.id, subjectId: row.subjectId, name: row.name, questionCount: countsByTopic.get(row.id) ?? 0, completed: false, displayOrder: row.displayOrder }))));
+  res.json(ListTopicsResponse.parse(rows.map((row) => ({ id: row.id, subjectId: row.subjectId, chapterId: row.chapterId, name: row.name, questionCount: countsByTopic.get(row.id) ?? 0, completed: false, displayOrder: row.displayOrder }))));
 });
 
 router.post("/topics", requireAdmin, async (req, res): Promise<void> => {
-  const parsed = z.object({ subjectId: z.number().int().positive(), name: z.string().min(1), displayOrder: z.number().int().optional() }).safeParse(req.body);
+  const parsed = z.object({ subjectId: z.number().int().positive(), chapterId: z.number().int().positive().nullable().optional(), name: z.string().min(1), displayOrder: z.number().int().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "subjectId and name are required" }); return; }
+  if (parsed.data.chapterId) {
+    const [chapter] = await db.select().from(chaptersTable).where(and(eq(chaptersTable.id, parsed.data.chapterId), eq(chaptersTable.subjectId, parsed.data.subjectId), eq(chaptersTable.archived, false)));
+    if (!chapter) { res.status(400).json({ error: "The chapter must belong to the selected subject." }); return; }
+  }
   let displayOrder = parsed.data.displayOrder;
   if (displayOrder === undefined) {
     const [{ maxOrder } = { maxOrder: null }] = await db.select({ maxOrder: sql<number | null>`max(${topicsTable.displayOrder})` }).from(topicsTable).where(eq(topicsTable.subjectId, parsed.data.subjectId));
     displayOrder = (maxOrder ?? -1) + 1;
   }
-  const [row] = await db.insert(topicsTable).values({ subjectId: parsed.data.subjectId, name: parsed.data.name, displayOrder }).returning();
+  const [row] = await db.insert(topicsTable).values({ subjectId: parsed.data.subjectId, chapterId: parsed.data.chapterId ?? null, name: parsed.data.name, displayOrder }).returning();
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "TOPIC_CREATED", entity: "topic", entityId: row.id });
-  res.status(201).json({ id: row.id, subjectId: row.subjectId, name: row.name, questionCount: 0, completed: false, displayOrder: row.displayOrder });
+  res.status(201).json({ id: row.id, subjectId: row.subjectId, chapterId: row.chapterId, name: row.name, questionCount: 0, completed: false, displayOrder: row.displayOrder });
 });
 
 router.patch("/topics/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const parsed = z.object({ name: z.string().min(1).optional(), active: z.boolean().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
+  const parsed = z.object({ name: z.string().min(1).optional(), chapterId: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), displayOrder: z.number().int().optional() }).safeParse(req.body);
   if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid topic" }); return; }
+  if (parsed.data.chapterId) {
+    const [current] = await db.select().from(topicsTable).where(eq(topicsTable.id, id));
+    const [chapter] = await db.select().from(chaptersTable).where(and(eq(chaptersTable.id, parsed.data.chapterId), eq(chaptersTable.archived, false)));
+    if (!current) { res.status(404).json({ error: "Topic not found" }); return; }
+    if (!chapter || chapter.subjectId !== current.subjectId) { res.status(400).json({ error: "The chapter must belong to the topic's subject." }); return; }
+  }
   const [row] = await db.update(topicsTable).set(parsed.data).where(eq(topicsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Topic not found" }); return; }
   // Bug fix: this hardcoded questionCount to 0 on every edit (rename,
@@ -897,7 +910,7 @@ router.patch("/topics/:id", requireAdmin, async (req, res): Promise<void> => {
   // just missed here. Any caller that trusts this response body's count
   // (rather than refetching the list) would show a topic's question count
   // silently drop to 0 the moment an admin renamed it.
-  res.json({ id: row.id, subjectId: row.subjectId, name: row.name, questionCount: await getTopicMcqCount(row.id), completed: false, displayOrder: row.displayOrder });
+  res.json({ id: row.id, subjectId: row.subjectId, chapterId: row.chapterId, name: row.name, questionCount: await getTopicMcqCount(row.id), completed: false, displayOrder: row.displayOrder });
 });
 
 router.delete("/topics/:id", requireAdmin, async (req, res): Promise<void> => {

@@ -145,4 +145,19 @@ CREATE TABLE IF NOT EXISTS med_notification_dismissals (
 );
 CREATE INDEX IF NOT EXISTS med_notification_dismissals_user_id_idx ON med_notification_dismissals (user_id);
 
+-- Chapters: Subject -> Chapter -> Topic (see schema/medschool.ts).
+CREATE TABLE IF NOT EXISTS med_chapters (
+  id SERIAL PRIMARY KEY,
+  subject_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  archived BOOLEAN NOT NULL DEFAULT FALSE,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE med_topics ADD COLUMN IF NOT EXISTS chapter_id INTEGER;
+CREATE INDEX IF NOT EXISTS med_topics_chapter_idx ON med_topics (chapter_id);
+CREATE INDEX IF NOT EXISTS med_chapters_subject_idx ON med_chapters (subject_id);
+
 COMMIT;

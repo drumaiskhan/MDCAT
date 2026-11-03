@@ -1,2 +1,2 @@
-import AdminCurriculum from './AdminCurriculum';
-export default function Topics(){return <AdminCurriculum topics/>}
+import AdminTopics from './AdminTopics';
+export default function Topics(){return <AdminTopics/>}

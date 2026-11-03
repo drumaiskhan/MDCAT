@@ -34,7 +34,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { groupByChapter, useChapters } from '@/lib/chapters';
 
 // Round 3, item 10 (performance) — this was `new QueryClient()` with no
 // options, meaning every query defaulted to `staleTime: 0` and refetched
@@ -78,6 +79,7 @@ function Flashcards() {
   const allTopicsQ = useListTopics();
   const [subjectId, setSubjectId] = useState('');
   const topicsQ = useListTopics(subjectId ? { subjectId: Number(subjectId) } : undefined);
+  const chaptersQ = useChapters(subjectId ? Number(subjectId) : undefined);
   const [topicId, setTopicId] = useState(urlTopicId ? String(urlTopicId) : '');
   const activeTopicId = Number(topicId) || undefined;
   const [queryText, setQueryText] = useState('');
@@ -184,7 +186,12 @@ function Flashcards() {
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Topics</SelectItem>
-        {(topicsQ.data || []).map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+        {groupByChapter(topicsQ.data || [], chaptersQ.data).map((sec) => {
+          const items = sec.topics.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>);
+          return sec.chapter || (chaptersQ.data?.length ?? 0) > 0
+            ? <SelectGroup key={sec.chapter?.id ?? 'none'}><SelectLabel>{sec.chapter?.name ?? 'Other topics'}</SelectLabel>{items}</SelectGroup>
+            : items;
+        })}
       </SelectContent>
     </Select>
     <div className="relative"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><input value={queryText} onChange={(e) => setQueryText(e.target.value)} placeholder="Search flashcards..." className="h-10 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/20" data-testid="input-flashcard-search" /></div>

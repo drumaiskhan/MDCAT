@@ -1,85 +1,290 @@
-name: Build and deploy to cPanel
+
+name: Deploy MDCAT API to cPanel
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: Deploy the tested build to the configured cPanel destinations
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: cpanel-${{ github.ref }}
+  group: mdcat-api-cpanel-deploy
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: npm
-      - run: npm install --global npm@10.9.7
-      - run: npm ci
-      - run: npm run test:mdcat && npm run test:auth
-      - run: npm run build
-      - run: npm run package:hosting
-        env:
-          API_URL: ${{ vars.CPANEL_API_ORIGIN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cpanel-build
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 14
-          path: |
-            admin/hosting/
-            student/hosting/
-            backend/hosting/
-
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
-    needs: build
+  deploy-api:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: cpanel-production
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          name: cpanel-build
-          path: release
-      - name: Configure SSH identity and verified server key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.CPANEL_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.CPANEL_SSH_KNOWN_HOSTS }}
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install npm version
+        run: npm install --global npm@10.9.7
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Build API
+      - name: Build API
+        run: npm run build --workspace=@workspace/api-server
+
+      # 5. Package API
+      - name: Package API
         shell: bash
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+          export DEPLOYED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const out = 'deploy/api-cpanel';
+
+          fs.rmSync(out, { recursive: true, force: true });
+          fs.mkdirSync(out, { recursive: true });
+
+          if (!fs.existsSync('backend/dist/index.mjs')) {
+            throw new Error('Missing backend/dist/index.mjs');
+          }
+
+          fs.cpSync('backend/dist', `${out}/dist`, {
+            recursive: true,
+            filter: source => !source.endsWith('.map'),
+          });
+
+          if (fs.existsSync('backend/assets')) {
+            fs.cpSync('backend/assets', `${out}/assets`, {
+              recursive: true,
+            });
+          }
+
+          const backendPkg = JSON.parse(
+            fs.readFileSync('backend/package.json', 'utf8')
+          );
+
+          const dependencies = {};
+
+          for (const name of [
+            '@napi-rs/canvas',
+            'pdfjs-dist',
+            'nodemailer',
+            'pino',
+            'pino-http',
+            'pino-pretty',
+          ]) {
+            const version =
+              backendPkg.dependencies?.[name] ??
+              backendPkg.devDependencies?.[name];
+
+            if (!version) {
+              throw new Error(`Missing runtime dependency: ${name}`);
+            }
+
+            dependencies[name] = version;
+          }
+
+          fs.writeFileSync(
+            `${out}/package.json`,
+            JSON.stringify(
+              {
+                name: 'mdcat-api-runtime',
+                private: true,
+                main: 'app.js',
+                scripts: {
+                  start: 'node app.js',
+                },
+                engines: {
+                  node: '>=22.12.0 <23',
+                },
+                packageManager: 'npm@10.9.7',
+                dependencies,
+              },
+              null,
+              2
+            ) + '\n'
+          );
+
+          const metadata = {
+            DEPLOY_COMMIT: process.env.DEPLOY_COMMIT,
+            DEPLOYED_AT: process.env.DEPLOYED_AT,
+            DEPLOY_RUN_ID: process.env.DEPLOY_RUN_ID,
+          };
+
+          for (const [key, value] of Object.entries(metadata)) {
+            if (!value) {
+              throw new Error(`Missing deployment metadata: ${key}`);
+            }
+          }
+
+          const appJs = `
+          const path = require('node:path');
+          const { pathToFileURL } = require('node:url');
+
+          process.chdir(__dirname);
+          process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+
+          ${Object.entries(metadata)
+            .map(([key, value]) =>
+              `process.env.${key} = ${JSON.stringify(value)};`
+            )
+            .join('\n')}
+
+          import(pathToFileURL(path.join(__dirname, 'dist/index.mjs')).href)
+            .catch(error => {
+              console.error('MDCAT API startup failed:', error);
+              process.exit(1);
+            });
+          `;
+
+          fs.writeFileSync(`${out}/app.js`, appJs);
+
+          fs.copyFileSync(
+            'hosting.env.example',
+            `${out}/.env.example`
+          );
+
+          console.log('API package created successfully.');
+          console.log('Deployment commit:', metadata.DEPLOY_COMMIT);
+          console.log('Deployment time:', metadata.DEPLOYED_AT);
+          console.log('Deployment run ID:', metadata.DEPLOY_RUN_ID);
+          NODE
+
+      # 6. Install FTP client
+      - name: Install lftp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+
+      # 7. Upload API and force Passenger restart
       - name: Deploy and restart Passenger
-        run: bash backend/scripts/deploy-cpanel.sh release
+        shell: bash
         env:
-          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-          CPANEL_USER: ${{ secrets.CPANEL_USER }}
-          CPANEL_SSH_PORT: ${{ vars.CPANEL_SSH_PORT }}
-          CPANEL_API_DIR: ${{ vars.CPANEL_API_DIR }}
-          CPANEL_STUDENT_DIR: ${{ vars.CPANEL_STUDENT_DIR }}
-          CPANEL_ADMIN_DIR: ${{ vars.CPANEL_ADMIN_DIR }}
-          CPANEL_NODE_ENV: ${{ vars.CPANEL_NODE_ENV }}
-          CPANEL_API_ORIGIN: ${{ vars.CPANEL_API_ORIGIN }}
-      - name: Remove runner SSH identity
-        if: always()
-        run: rm -f ~/.ssh/id_ed25519
+          FTP_SERVER: ${{ secrets.CPANEL_FTP_SERVER }}
+          FTP_PORT: ${{ secrets.CPANEL_FTP_PORT }}
+          FTP_USER: ${{ secrets.CPANEL_FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          FTP_TARGET: ${{ secrets.CPANEL_FTP_TARGET }}
+        run: |
+          set -euo pipefail
+
+          for v in FTP_SERVER FTP_USER FTP_PASS FTP_TARGET; do
+            if [[ -z "${!v}" ]]; then
+              echo "Missing GitHub secret: $v"
+              exit 1
+            fi
+          done
+
+          FTP_PORT="${FTP_PORT:-21}"
+
+          echo "Connecting to cPanel..."
+
+          lftp -p "$FTP_PORT" \
+            -u "$FTP_USER","$FTP_PASS" "$FTP_SERVER" <<EOF
+
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ftp:passive-mode true
+          set net:max-retries 3
+          set net:timeout 30
+          set cmd:fail-exit yes
+
+          echo "Uploading API files..."
+
+          mirror -R --parallel=4 --verbose \
+            --exclude-glob .env \
+            --exclude-glob .env.* \
+            --exclude-glob node_modules/ \
+            --exclude-glob uploads/ \
+            --exclude-glob tmp/ \
+            deploy/api-cpanel/ "$FTP_TARGET"
+
+          echo "API upload completed."
+
+          echo "Forcing a fresh Passenger restart signal..."
+
+          put -O "$FTP_TARGET/tmp" /dev/null
+          mv "$FTP_TARGET/tmp/null" "$FTP_TARGET/tmp/restart.txt"
+
+          echo "Passenger restart signal written."
+
+          ls -l "$FTP_TARGET/tmp/restart.txt"
+
+          echo "Restart signal command completed."
+
+          bye
+          EOF
+
+      # 8. Verify actual live deployment
+      - name: Verify live API deployment
+        shell: bash
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          API_URL="https://api.site.medschoolproffs.live/api/healthz"
+
+          echo "Waiting for Passenger to restart..."
+
+          RESPONSE=""
+
+          for attempt in $(seq 1 30); do
+
+            RESPONSE="$(curl \
+              --silent \
+              --show-error \
+              --fail \
+              --connect-timeout 5 \
+              --max-time 10 \
+              "$API_URL" 2>/dev/null || true)"
+
+            if [[ -n "$RESPONSE" ]] && \
+              echo "$RESPONSE" | jq -e \
+                --arg commit "$DEPLOY_COMMIT" \
+                --arg run "$DEPLOY_RUN_ID" \
+                '.version == $commit and .deploymentId == $run' \
+                >/dev/null 2>&1; then
+
+              echo "=================================="
+              echo "DEPLOYMENT VERIFIED SUCCESSFULLY"
+              echo "=================================="
+
+              echo "$RESPONSE" | jq .
+
+              exit 0
+            fi
+
+            echo "Attempt $attempt/30: Waiting for new deployment..."
+
+            sleep 3
+          done
+
+          echo "=================================="
+          echo "DEPLOYMENT VERIFICATION FAILED"
+          echo "=================================="
+
+          echo "Expected commit: $DEPLOY_COMMIT"
+          echo "Expected run ID: $DEPLOY_RUN_ID"
+          echo "Latest API response: $RESPONSE"
+
+          exit 1

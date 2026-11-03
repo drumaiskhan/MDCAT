@@ -573,6 +573,7 @@ components:
       properties:
         id: { type: integer }
         subjectId: { type: integer }
+        chapterId: { type: ["integer", "null"] }
         name: { type: string }
         questionCount: { type: integer }
         completed: { type: boolean }

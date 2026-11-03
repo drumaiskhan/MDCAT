@@ -1,4 +1,6 @@
 // Auto-extracted shared helpers/components/hooks used across admin page
+import { TopicOptions } from '@/components/TopicOptions';
+import { ChapterGroups } from '@/components/ChapterGroups';
 // modules. Split out of the original monolithic App.tsx so route-level
 // pages can be lazy-loaded independently without duplicating this.
 import { type ReactNode, type ComponentProps, useState, useEffect, lazy, Suspense } from 'react';
@@ -372,7 +374,7 @@ export function McqTreeSubject({ moduleId, subjectId, name, mcqsByTopic, selecte
   const subjectRows = [...mcqsByTopic.entries()].filter(([tId]) => topics.some((t) => t.id === tId)).flatMap(([, rows]) => rows);
   return <div className="rounded-xl border border-border bg-card">
     <div className="flex flex-wrap items-center justify-between gap-1 px-4 py-2.5"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-tree-subject-${subjectId}`}><ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} />{name}</button>{open && <><AnalysisToggle rows={subjectRows} label={name} filters={{ subjectId }} /><BulkDeleteInScope label={name} count={subjectRows.length} filters={{ subjectId }} /></>}</div>
-    {open && <div className="space-y-2 border-t border-border p-3">{topicsQ.isLoading ? <InlineLoading label="Loading topics…" /> : topics.length ? topics.map((t) => <McqTreeTopic key={t.id} moduleId={moduleId} subjectId={subjectId} topicId={t.id} name={t.name} mcqsByTopic={mcqsByTopic} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />) : <p className="text-[11px] text-muted-foreground">No topics in this subject yet.</p>}</div>}
+    {open && <div className="space-y-2 border-t border-border p-3">{topicsQ.isLoading ? <InlineLoading label="Loading topics…" /> : topics.length ? <ChapterGroups subjectId={subjectId} topics={topics} itemCount={(id) => mcqsByTopic.get(id)?.length ?? 0} renderTopic={(t) => <McqTreeTopic key={t.id} moduleId={moduleId} subjectId={subjectId} topicId={t.id} name={t.name} mcqsByTopic={mcqsByTopic} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />} /> : <p className="text-[11px] text-muted-foreground">No topics in this subject yet.</p>}</div>}
   </div>;
 }
 
@@ -737,7 +739,7 @@ export function PastPaperUploader({ pastPaperId, onImported }: { pastPaperId: nu
 
   return <div>
     <p className="mb-2 text-[11px] text-muted-foreground">Optional — also file these under a subject/topic. Not required to import; the past paper is enough on its own.</p>
-    <div className="grid gap-2 sm:grid-cols-3"><select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setTopicId(''); }}  className="h-9 rounded-lg border border-border bg-background px-2 text-xs disabled:opacity-50" data-testid={`select-paper-subject-${pastPaperId}`}><option value="">No subject</option>{(subjectsQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><select value={topicId} onChange={(e) => setTopicId(e.target.value)} disabled={!subjectId} className="h-9 rounded-lg border border-border bg-background px-2 text-xs disabled:opacity-50" data-testid={`select-paper-topic-${pastPaperId}`}><option value="">No topic</option>{(topicsQ.data || []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+    <div className="grid gap-2 sm:grid-cols-3"><select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setTopicId(''); }}  className="h-9 rounded-lg border border-border bg-background px-2 text-xs disabled:opacity-50" data-testid={`select-paper-subject-${pastPaperId}`}><option value="">No subject</option>{(subjectsQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><select value={topicId} onChange={(e) => setTopicId(e.target.value)} disabled={!subjectId} className="h-9 rounded-lg border border-border bg-background px-2 text-xs disabled:opacity-50" data-testid={`select-paper-topic-${pastPaperId}`}><option value="">No topic</option><TopicOptions subjectId={subjectId} topics={topicsQ.data || []} /></select></div>
     <p className="mt-2 text-[11px] font-semibold text-muted-foreground">Supports .txt, .csv, .xlsx, .xls, .pdf, .docx, and picks up per-option explanations if the file has them.</p>
     <div className="mt-2 flex flex-wrap items-center gap-2"><input type="file" accept=".txt,.csv,.xlsx,.xls,.pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="flex-1 rounded-lg border border-dashed border-border bg-background px-2 py-2 text-xs" data-testid={`input-paper-file-${pastPaperId}`} /><button disabled={!file || parsing} onClick={parseFile} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-parse-paper-${pastPaperId}`}>{parsing ? 'Reading…' : 'Parse file'}</button></div>
     {parseError && <p className="mt-2 text-[11px] font-semibold text-destructive">{parseError}</p>}
@@ -819,7 +821,7 @@ export function FlashcardTreeSubject({ subjectId, name, cardsByTopic }: { subjec
   const subjectCount = [...cardsByTopic.entries()].filter(([tId]) => topics.some((t) => t.id === tId)).reduce((sum, [, rows]) => sum + rows.length, 0);
   return <div className="rounded-xl border border-border bg-card">
     <div className="flex items-center justify-between px-4 py-2.5"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-flashcard-tree-subject-${subjectId}`}><ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} />{name}</button>{open && <FlashcardBulkDeleteInScope label={name} count={subjectCount} filters={{ subjectId }} />}</div>
-    {open && <div className="space-y-2 border-t border-border p-3">{topicsQ.isLoading ? <InlineLoading label="Loading topics…" /> : topics.length ? topics.map((t) => <FlashcardTreeTopic key={t.id} topicId={t.id} name={t.name} cardsByTopic={cardsByTopic} />) : <p className="text-[11px] text-muted-foreground">No topics in this subject yet.</p>}</div>}
+    {open && <div className="space-y-2 border-t border-border p-3">{topicsQ.isLoading ? <InlineLoading label="Loading topics…" /> : topics.length ? <ChapterGroups subjectId={subjectId} topics={topics} itemCount={(id) => cardsByTopic.get(id)?.length ?? 0} renderTopic={(t) => <FlashcardTreeTopic key={t.id} topicId={t.id} name={t.name} cardsByTopic={cardsByTopic} />} /> : <p className="text-[11px] text-muted-foreground">No topics in this subject yet.</p>}</div>}
   </div>;
 }
 

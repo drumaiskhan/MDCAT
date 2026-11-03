@@ -961,7 +961,8 @@ export const academicApi = {
 // ---------------------------------------------------------------------------
 
 export interface AdminSubject { id: number; moduleId: number; name: string; active?: boolean; topicCount: number; iconUrl?: string | null; displayOrder?: number }
-export interface AdminTopic { id: number; subjectId: number; name: string; active?: boolean; questionCount: number; completed?: boolean; displayOrder?: number }
+export interface AdminChapter { id: number; subjectId: number; name: string; active?: boolean; topicCount: number; questionCount: number; displayOrder?: number }
+export interface AdminTopic { id: number; subjectId: number; chapterId?: number | null; name: string; active?: boolean; questionCount: number; completed?: boolean; displayOrder?: number }
 
 export const subjectAdminApi = {
   list: (moduleId?: number) => request<AdminSubject[]>(`/subjects${moduleId ? `?moduleId=${moduleId}` : ''}`),
@@ -972,9 +973,19 @@ export const subjectAdminApi = {
 
 export const topicAdminApi = {
   list: (subjectId?: number) => request<AdminTopic[]>(`/topics${subjectId ? `?subjectId=${subjectId}` : ''}`),
-  create: (body: { subjectId: number; name: string; active?: boolean; displayOrder?: number }) => request<AdminTopic>('/topics', { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: number, body: Partial<{ name: string; active: boolean; displayOrder: number }>) => request<AdminTopic>(`/topics/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  create: (body: { subjectId: number; chapterId?: number | null; name: string; active?: boolean; displayOrder?: number }) => request<AdminTopic>('/topics', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; chapterId: number | null; active: boolean; displayOrder: number }>) => request<AdminTopic>(`/topics/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/topics/${id}`, { method: 'DELETE' }),
+  /** Move topics into a chapter (chapterId = null takes them out of any chapter). */
+  move: (topicIds: number[], chapterId: number | null) => request<{ ok: true; moved: number }>('/topics/move', { method: 'POST', body: JSON.stringify({ topicIds, chapterId }) }),
+};
+
+// Chapters sit between a subject and its topics (Subject → Chapter → Topic).
+export const chapterAdminApi = {
+  list: (subjectId?: number) => request<AdminChapter[]>(`/chapters${subjectId ? `?subjectId=${subjectId}` : ''}`),
+  create: (body: { subjectId: number; name: string; displayOrder?: number }) => request<AdminChapter>('/chapters', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<{ name: string; active: boolean; displayOrder: number }>) => request<AdminChapter>(`/chapters/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/chapters/${id}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

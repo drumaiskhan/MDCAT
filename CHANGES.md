@@ -1,3 +1,12 @@
+# Chapters (Subject → Chapter → Topic)
+
+- New `med_chapters` table and nullable `med_topics.chapter_id` (created automatically on API start by `ensureSchema`; also in `ensure-schema.sql` / `manual-migration.sql`). Existing topics stay valid and show as "No chapter".
+- API: `GET/POST /chapters`, `PATCH/DELETE /chapters/:id`, `POST /topics/move`; topics accept and return `chapterId`. Deleting a chapter keeps its topics; deleting a subject archives its chapters. Full backups include chapters.
+- MCQs, flashcards and lectures stay attached to a topic and inherit the chapter through it.
+- Student sidebar: removed the legacy sidebar rules from `fx.css` that fought `sidebar.css` (oversized rows, huge group gaps, clipped active marker); `sidebar.css` is now the single compact, light/dark-aware style.
+- Student: Topics page groups topics under chapter headings (with per-chapter progress), the flashcard topic filter groups by chapter, and lectures show Subject / Chapter / Topic. Subjects without chapters look unchanged.
+- Admin: new Chapters page (`/admin/chapters`), chapter-aware Topics page (filter, add/bulk-add into a chapter, move, bulk move), topic pickers grouped by chapter in MCQ bank / flashcards / lectures / past-paper tagging, and MCQ + flashcard trees grouped Subject → Chapter → Topic.
+
 # Deployment restructure: Hostinger frontends + cPanel API
 
 - Student and admin are now packaged as two independent static Hostinger sites (`deploy/student-hostinger`, `deploy/admin-hostinger`); the API is packaged for cPanel (`deploy/api-cpanel`). New `DEPLOYMENT.md` replaces the old Hostinger-API / cPanel-frontend instructions and CPANEL-WORKFLOW.md.

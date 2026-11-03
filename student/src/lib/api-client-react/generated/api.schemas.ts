@@ -173,6 +173,7 @@ export interface Subject {
 export interface Topic {
   id: number;
   subjectId: number;
+  chapterId?: number | null;
   name: string;
   questionCount: number;
   completed: boolean;

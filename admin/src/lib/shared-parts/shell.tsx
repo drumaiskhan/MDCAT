@@ -60,7 +60,7 @@ export const adminGroups: Array<{ label: string; items: NavItem[] }> = [
     ['/admin/plans', 'Subscription plans', CreditCard], ['/admin/coupons', 'Coupon codes', Percent], ['/admin/payments', 'Payments & collection', ReceiptText],
   ] },
   { label: 'Curriculum', items: [
-    ['/admin/lectures','Lectures',BookOpen], ['/admin/live-lectures','Live Lecture',BookOpen], ['/admin/learning-settings','Learning settings',Settings], ['/admin/subjects', 'Subjects', BookOpen], ['/admin/topics', 'Topics', CircleHelp],
+    ['/admin/lectures','Lectures',BookOpen], ['/admin/live-lectures','Live Lecture',BookOpen], ['/admin/learning-settings','Learning settings',Settings], ['/admin/subjects', 'Subjects', BookOpen], ['/admin/chapters', 'Chapters', BookOpen], ['/admin/topics', 'Topics', CircleHelp],
   ] },
   { label: 'Question banks', items: [
     ['/admin/mcqs', 'MCQ bank', CircleHelp], ['/admin/quality', 'Content quality', ShieldCheck], ['/admin/flashcards', 'Flashcards', Zap], ['/admin/notes', 'Notes library', BookOpen], ['/admin/books', 'Books library', BookOpen], ['/admin/book-purchases', 'Book purchases', ReceiptText], ['/admin/past-papers', 'Past papers', FileStack], ['/admin/exams', 'Sunday Tests (Mock Exams)', ClipboardCheck],
@@ -80,7 +80,7 @@ export const adminGroups: Array<{ label: string; items: NavItem[] }> = [
 // student panel's NAV_HUE, so the glossy icon tiles tint per destination.
 const NAV_HUE: Record<string, number> = {
   '/admin': 214, '/admin/students': 172, '/admin/merit': 48, '/admin/plans': 152, '/admin/coupons': 38, '/admin/payments': 45,
-  '/admin/academic-structure': 205, '/admin/content': 228, '/admin/subjects': 190, '/admin/topics': 200,
+  '/admin/academic-structure': 205, '/admin/content': 228, '/admin/subjects': 190, '/admin/chapters': 195, '/admin/topics': 200,
   '/admin/mcqs': 268, '/admin/quality': 160, '/admin/flashcards': 290, '/admin/books': 22, '/admin/book-purchases': 12,
   '/admin/past-papers': 350, '/admin/exams': 4, 
   '/admin/team': 240, '/admin/site-content': 215, '/admin/feedback': 180, '/admin/ai-visualizer-logs': 275,

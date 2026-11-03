@@ -381,9 +381,26 @@ export const subjectsTable = pgTable("med_subjects", {
   ...timestamps,
 });
 
+// Chapters sit between a subject and its topics: Subject → Chapter → Topic.
+// A chapter is only a grouping of topics; MCQs, flashcards and lectures stay
+// attached to a topic and inherit their chapter through topics.chapter_id, so
+// moving a topic to another chapter moves everything inside it.
+export const chaptersTable = pgTable("med_chapters", {
+  id: serial("id").primaryKey(),
+  subjectId: integer("subject_id").notNull(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  archived: boolean("archived").notNull().default(false),
+  displayOrder: integer("display_order").notNull().default(0),
+  ...timestamps,
+});
+
 export const topicsTable = pgTable("med_topics", {
   id: serial("id").primaryKey(),
   subjectId: integer("subject_id").notNull(),
+  // Nullable: topics created before chapters existed (or not yet filed) show
+  // up under "No chapter" until an admin moves them into one.
+  chapterId: integer("chapter_id"),
   name: text("name").notNull(),
   active: boolean("active").notNull().default(true),
   archived: boolean("archived").notNull().default(false),

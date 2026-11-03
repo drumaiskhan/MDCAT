@@ -14,7 +14,9 @@ import {
   Flag, Trophy, MessageSquare, Landmark, Copy, QrCode, User as UserIcon, Mail, Phone, Hash,
   GraduationCap, Eye, EyeOff, Smartphone, UploadCloud, ImageOff,
   RotateCcw, ThumbsUp, ThumbsDown, CheckCheck, ClipboardCheck, AlertTriangle, Link2 as LinkIcon, Lightbulb,
-  LayoutGrid, Presentation, Wand2, Crown, Globe, Star, Megaphone, Swords
+  LayoutGrid, Presentation, Wand2, Crown, Globe, Star, Megaphone, Swords,
+  ListChecks, ScrollText, Timer, Layers, StickyNote, BookMarked, Activity, MonitorPlay, Radio, BookmarkCheck,
+  PenLine, History, FlagTriangleRight, Medal, UsersRound, BellRing, CircleUserRound,
 } from 'lucide-react';
 import { applyThemeVars } from '@/lib/theme';
 import { Aurora, AuthShowcase } from '@/lib/landing-visuals';
@@ -79,12 +81,12 @@ export function Logo({ dark = false, href = '/' }: { dark?: boolean; href?: stri
   </Link>;
 }
 
-type NavItem = [string, string, typeof LayoutDashboard];
+type NavItem = [string, string, typeof LayoutGrid];
 
 export const navGroups: Array<{ label: string; items: NavItem[] }> = [
- {label:'Study desk',items:[['/dashboard','Dashboard',LayoutDashboard],['/mcqs','MCQs Practice',BookOpen],['/past-papers','Past Papers',FileStack],['/exams','Sunday Tests (Mock Exams)',ClipboardCheck],['/flashcards','Flashcards',Zap],['/notes','Notes',FileText],['/books','Books',Library],['/progress','Progress Analysis',TrendingUp],['/study','Study Plan',CalendarCheck],['/lectures','Lectures',Presentation],['/live-lectures','Live Lecture',CalendarCheck],]},
- {label:'Your tools',items:[['/saved-mcqs','Saved MCQs',Star],['/notebook','My Notebook',NotebookPen],['/saved-sessions','Saved Sessions',Bookmark],['/flagged-mcqs','Flagged MCQs',Flag],['/leaderboard','Leaderboard',Trophy],['/challenge','Challenge a Friend',Swords]]},
- {label:'Community & account',items:[['/team','Team Members',Users],['/payments','Membership',CreditCard],['/notifications','Notifications',Bell],['/feedback','Feedback',MessageSquare],['/profile','Profile',UserIcon]]}
+ {label:'Study desk',items:[['/dashboard','Dashboard',LayoutGrid],['/mcqs','MCQs Practice',ListChecks],['/past-papers','Past Papers',ScrollText],['/exams','Sunday Tests (Mock Exams)',Timer],['/flashcards','Flashcards',Layers],['/notes','Notes',StickyNote],['/books','Books',BookMarked],['/progress','Progress Analysis',Activity],['/study','Study Plan',Target],['/lectures','Lectures',MonitorPlay],['/live-lectures','Live Lecture',Radio],]},
+ {label:'Your tools',items:[['/saved-mcqs','Saved MCQs',BookmarkCheck],['/notebook','My Notebook',PenLine],['/saved-sessions','Saved Sessions',History],['/flagged-mcqs','Flagged MCQs',FlagTriangleRight],['/leaderboard','Leaderboard',Medal],['/challenge','Challenge a Friend',Flame]]},
+ {label:'Community & account',items:[['/team','Team Members',UsersRound],['/payments','Membership',Crown],['/notifications','Notifications',BellRing],['/feedback','Feedback',Megaphone],['/profile','Profile',CircleUserRound]]}
 ];
 
 export function SideNav({ user, onClose }: { user: User; onClose: () => void }) {

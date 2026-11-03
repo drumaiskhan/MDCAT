@@ -22,7 +22,7 @@ const cx = (...parts: Array<string | false | null | undefined>) => parts.filter(
 const vars = (v: Record<string, string | number>) => v as unknown as CSSProperties;
 
 export interface SubjectRow { id: number; name: string; topicCount: number; iconUrl?: string | null }
-export interface TopicItem { id: number; name: string; questionCount: number; completed: boolean }
+export interface TopicItem { id: number; name: string; questionCount: number; completed: boolean; chapterId?: number | null }
 
 // ---------------------------------------------------------------------------
 // Tilt primitives. The OUTER element receives the pointer and never moves; the

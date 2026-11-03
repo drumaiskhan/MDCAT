@@ -28,12 +28,14 @@ import ospeRouter from "./ospe";
 import meritRouter from "./merit";
 
 import lecturesRouter from "./lectures";
+import chaptersRouter from "./chapters";
 import studyLibraryRouter from "./study-library";
 
 const router: IRouter = Router();
 router.use("/study-library", studyLibraryRouter);
 
 router.use(lecturesRouter);
+router.use(chaptersRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(academicStructureRouter);

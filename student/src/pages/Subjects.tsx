@@ -10,6 +10,7 @@ import {
   getListModulesQueryKey, getListSubjectsQueryKey, useListModules, useListSubjects, useListTopics,
 } from '@/lib/api-client-react';
 import { EmptyState, SectionHeader, usePageTitle } from '@/lib/shared';
+import { groupByChapter, useChapters } from '@/lib/chapters';
 import {
   CardsSkeleton, FilterBar, RowsSkeleton, SubjectCard, SubjectsHero, TopicRow, TopicSeg, TopicsHero,
   type SubjectRow, type TopicFilter, type TopicItem,
@@ -29,6 +30,7 @@ function TopicsView({ subjectId }: { subjectId?: number }) {
   const subjectName = subjectRow?.name;
   usePageTitle(subjectId != null ? `Subjects / ${subjectName ?? '…'}` : undefined);
 
+  const chaptersQ = useChapters(subjectId);
   const [query, setQuery] = useState('');
   const [seg, setSeg] = useState<TopicFilter>('all');
   const deferredQuery = useDeferredValue(query);
@@ -40,6 +42,7 @@ function TopicsView({ subjectId }: { subjectId?: number }) {
     const q = norm(deferredQuery);
     return topicsList.filter((t) => (seg === 'all' || (seg === 'done') === t.completed) && (!q || t.name.toLowerCase().includes(q)));
   }, [topicsList, deferredQuery, seg]);
+  const chapterSections = useMemo(() => groupByChapter(visible, chaptersQ.data), [visible, chaptersQ.data]);
   const loading = topicQ.isLoading;
 
   return <div className="cu-page"><StudyNavigation/>
@@ -51,9 +54,25 @@ function TopicsView({ subjectId }: { subjectId?: number }) {
       {topicsList.length >= FILTER_MIN && <FilterBar query={query} onQuery={setQuery} placeholder="Search topics">
         <TopicSeg value={seg} onChange={setSeg} counts={{ all: topicsList.length, todo: topicsList.length - done, done }} />
       </FilterBar>}
-      {topicsList.length > 0 && visible.length > 0 && <ul className="cu-path" data-testid="list-topics">
-        {visible.map((t, i) => <TopicRow key={t.id} topic={t} index={i} isNext={t.id === next?.id} />)}
-      </ul>}
+      {topicsList.length > 0 && visible.length > 0 && (chapterSections.length === 1 && !chapterSections[0].chapter
+        ? <ul className="cu-path" data-testid="list-topics">
+          {visible.map((t, i) => <TopicRow key={t.id} topic={t} index={i} isNext={t.id === next?.id} />)}
+        </ul>
+        : <div className="space-y-6" data-testid="list-chapters">
+          {chapterSections.map((sec) => {
+            const sectionDone = sec.topics.filter((t) => t.completed).length;
+            const sectionQuestions = sec.topics.reduce((n, t) => n + (t.questionCount || 0), 0);
+            return <section key={sec.chapter?.id ?? 'none'} aria-label={sec.chapter?.name ?? 'Other topics'}>
+              <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2 px-1">
+                <h3 className="text-sm font-bold" data-testid={`heading-chapter-${sec.chapter?.id ?? 'none'}`}>{sec.chapter?.name ?? 'Other topics'}</h3>
+                <span className="text-[11px] font-semibold text-muted-foreground">{sectionDone}/{sec.topics.length} topics done · {sectionQuestions} question{sectionQuestions === 1 ? '' : 's'}</span>
+              </header>
+              <ul className="cu-path">
+                {sec.topics.map((t) => <TopicRow key={t.id} topic={t} index={visible.indexOf(t)} isNext={t.id === next?.id} />)}
+              </ul>
+            </section>;
+          })}
+        </div>)}
       {topicsList.length > 0 && visible.length === 0 && <EmptyState icon={SearchX} title="No matching topics" body="Try a different word, or switch back to All." />}
       {!topicsList.length && <EmptyState icon={Target} title="No topics yet" body="Your academic team hasn't published topics for this subject yet." />}
     </>}

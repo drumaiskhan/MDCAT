@@ -447,6 +447,7 @@ export const ListTopicsQueryParams = zod.object({
 export const ListTopicsResponseItem = zod.object({
   "id": zod.int(),
   "subjectId": zod.int(),
+  "chapterId": zod.int().nullable().optional(),
   "name": zod.string(),
   "questionCount": zod.int(),
   "completed": zod.boolean(),
