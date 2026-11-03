@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db, institutionsTable, programsTable, academicYearsTable, batchesTable, auditLogsTable, usersTable } from "@workspace/db";
-import { requireAdmin } from "../middlewares/auth";
+import { db, institutionsTable, programsTable, academicYearsTable, batchesTable, auditLogsTable, usersTable, courseYearsTable, membershipPlansTable } from "@workspace/db";
+import { requireAdmin, isAdminRole } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -256,6 +256,59 @@ router.delete("/batches/:id", requireAdmin, async (req, res): Promise<void> => {
   if (!row) { res.status(404).json({ error: "Batch not found" }); return; }
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "BATCH_ARCHIVED", entity: "batch", entityId: row.id });
   res.json(row);
+});
+
+// ---------------------------------------------------------------------------
+// Course years (FSc-I, FSc-II ...) — added manually by an admin, then attached
+// to membership plans so each course year / combination can carry its own fee.
+// ---------------------------------------------------------------------------
+
+const CourseYearBody = z.object({ name: z.string().trim().min(1).max(80), active: z.boolean().optional(), displayOrder: z.number().int().optional() });
+
+router.get("/course-years", async (req, res): Promise<void> => {
+  const isAdmin = !!req.user && isAdminRole(req.user.role);
+  const rows = await db.select().from(courseYearsTable).where(isAdmin ? undefined : eq(courseYearsTable.active, true)).orderBy(asc(courseYearsTable.displayOrder), asc(courseYearsTable.id));
+  res.json(rows);
+});
+
+router.post("/course-years", requireAdmin, async (req, res): Promise<void> => {
+  const parsed = CourseYearBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid course year" }); return; }
+  const existing = await db.select({ id: courseYearsTable.id }).from(courseYearsTable).where(sql`lower(${courseYearsTable.name}) = lower(${parsed.data.name})`).limit(1);
+  if (existing.length) { res.status(409).json({ error: "A course year with this name already exists" }); return; }
+  let displayOrder = parsed.data.displayOrder;
+  if (displayOrder === undefined) {
+    const [{ maxOrder } = { maxOrder: null }] = await db.select({ maxOrder: sql<number | null>`max(${courseYearsTable.displayOrder})` }).from(courseYearsTable);
+    displayOrder = (maxOrder ?? -1) + 1;
+  }
+  const [row] = await db.insert(courseYearsTable).values({ name: parsed.data.name, active: parsed.data.active ?? true, displayOrder }).returning();
+  await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "COURSE_YEAR_CREATED", entity: "course_year", entityId: row.id });
+  res.status(201).json(row);
+});
+
+router.patch("/course-years/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const parsed = CourseYearBody.partial().safeParse(req.body);
+  if (!parsed.success || Number.isNaN(id)) { res.status(400).json({ error: "Invalid request" }); return; }
+  const [row] = await db.update(courseYearsTable).set(parsed.data).where(eq(courseYearsTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Course year not found" }); return; }
+  await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "COURSE_YEAR_UPDATED", entity: "course_year", entityId: row.id });
+  res.json(row);
+});
+
+// Hard delete. Blocked while any plan still lists the course year or any
+// student is filed under it, so a plan never silently loses its audience.
+router.delete("/course-years/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid course year id" }); return; }
+  const [inPlan] = await db.select({ id: membershipPlansTable.id }).from(membershipPlansTable).where(sql`${id} = ANY(${membershipPlansTable.courseYearIds})`).limit(1);
+  if (inPlan) { res.status(409).json({ error: "A membership plan still uses this course year — remove it from the plan first (or just deactivate the course year)." }); return; }
+  const [student] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.courseYearId, id)).limit(1);
+  if (student) { res.status(409).json({ error: "Students are registered under this course year — deactivate it instead of deleting." }); return; }
+  const [row] = await db.delete(courseYearsTable).where(eq(courseYearsTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Course year not found" }); return; }
+  await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "COURSE_YEAR_DELETED", entity: "course_year", entityId: id });
+  res.json({ ok: true });
 });
 
 export default router;

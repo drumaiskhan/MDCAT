@@ -78,6 +78,18 @@ export const batchesTable = pgTable("med_batches", {
   ...timestamps,
 });
 
+// Admin-managed "course years" (e.g. FSc-I, FSc-II). Added manually by an
+// admin and used to scope membership plans: a plan lists the course year(s)
+// it covers, so FSc-I-only, FSc-II-only and combined (both) plans can each
+// carry their own fee.
+export const courseYearsTable = pgTable("med_course_years", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  displayOrder: integer("display_order").notNull().default(0),
+  ...timestamps,
+});
+
 // ---------------------------------------------------------------------------
 // Users / auth
 // ---------------------------------------------------------------------------
@@ -102,6 +114,8 @@ export const usersTable = pgTable(
     institutionId: integer("institution_id"),
     programId: integer("program_id"),
     academicYearId: integer("academic_year_id"),
+    // Course year picked at signup (FSc-I / FSc-II ...), see courseYearsTable.
+    courseYearId: integer("course_year_id"),
     batchId: integer("batch_id"),
     rollNumber: text("roll_number"),
     phone: text("phone"),
@@ -210,6 +224,10 @@ export const membershipPlansTable = pgTable("med_membership_plans", {
   // Null means "not currently discounted."
   originalPrice: numeric("original_price", { precision: 12, scale: 2 }),
   discountLabel: text("discount_label"),
+  // Course year(s) this plan is sold for (ids from med_course_years). Empty =
+  // available to every course year. [FSc-I] = Part 1 only, [FSc-II] = Part 2
+  // only, [FSc-I, FSc-II] = combined plan, which students of either year see.
+  courseYearIds: integer("course_year_ids").array().notNull().default([]),
   ...timestamps,
 });
 
@@ -1143,6 +1161,7 @@ export type Flashcard = typeof flashcardsTable.$inferSelect;
 export type Institution = typeof institutionsTable.$inferSelect;
 export type Program = typeof programsTable.$inferSelect;
 export type AcademicYear = typeof academicYearsTable.$inferSelect;
+export type CourseYear = typeof courseYearsTable.$inferSelect;
 export type Batch = typeof batchesTable.$inferSelect;
 export type Book = typeof booksTable.$inferSelect;
 export type Coupon = typeof couponsTable.$inferSelect;

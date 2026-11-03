@@ -32,7 +32,7 @@ import { toast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import { authApi, couponsApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
+import { authApi, couponsApi, courseYearsApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiRequestError, publicApi, pastPapersApi, notebookApi, savedSessionsApi, flaggedMcqsApi, feedbackApi, type MyFeedbackEntry, analyticsApi, type ProgressTrend, mcqImportApi, studentsAdminApi, paymentsAdminApi, membershipPlansAdminApi, mcqAdminApi, notificationsApi, siteContentApi, teamApi, moduleAdminApi, blocksApi, type Block, examsAdminApi, examsApi, explanationsApi, booksApi, type AdminBookStudent, DEFAULT_IMPORT_PATTERNS, STUDENT_STATUSES, type Institution, type Program, type AcademicYear, type Batch, type PastPaper, type NotebookEntry, type SavedSession, type FlaggedMcq, type FeedbackEntry, type McqCandidate, type StudentDetail, type SiteContent, type TeamMember, TEAM_CATEGORIES, TEAM_CATEGORY_LABELS, type AdminModule, type AdminExam, type StudentExam, type ExamAttemptRow, type ExamStartResponse, type ExamResult, type Exam, type ExplanationStatus, type PaymentDetails, type PaymentMethodConfig, aiVisualizerApi, type VisualizationSpec, LeaderboardRow } from '@/lib/api';
 
 // Round 3, item 10 (performance) — this was `new QueryClient()` with no
 // options, meaning every query defaulted to `staleTime: 0` and refetched
@@ -74,6 +74,8 @@ function Register() {
   const [matric, setMatric] = useState({ marks: '', total: '1100' });
   const [fsc, setFsc] = useState({ marks: '', total: '1100' });
   const [planId, setPlanId] = useState<number | null>(null);
+  // Course year (FSc-I / FSc-II ...) — admin-defined; plans are filtered by it.
+  const [courseYearId, setCourseYearId] = useState<number | null>(null);
   const [couponInput, setCouponInput] = useState('');
   const [couponResult, setCouponResult] = useState<{ code: string; discountedAmount: number; discountAmount: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -92,6 +94,8 @@ function Register() {
   const fail = (message: string) => { setError(message); setErrorTick((n) => n + 1); };
 
   const plans = useListMembershipPlans();
+  const courseYearsQ = useQuery({ queryKey: ['course-years'], queryFn: courseYearsApi.list });
+  const courseYears = courseYearsQ.data ?? [];
   const paymentDetails = useQuery({ queryKey: ['payment-details'], queryFn: publicApi.paymentDetails });
   // Same site-content query Shell (shared.tsx) reads for its post-login
   // trial banner — surfaced here too so a signed-out visitor sees trial
@@ -130,10 +134,13 @@ function Register() {
     </div>
   </AuthLayout>;
 
-  const selectedPlan = (plans.data || []).find((p) => p.id === planId) || null;
+  // Plans sold for the chosen course year (a combined FSc-I + FSc-II plan lists
+  // both, so it shows for either); plans with no course years are open to all.
+  const visiblePlans = (plans.data || []).filter((p) => { const ids = p.courseYearIds ?? []; return !ids.length || (courseYearId != null && ids.includes(courseYearId)); });
+  const selectedPlan = visiblePlans.find((p) => p.id === planId) || null;
   // A zero-priced plan (e.g. Trial) needs no payment, so no proof and no coupon.
   const isFreePlan = !!selectedPlan && Number(selectedPlan.price) <= 0;
-  const bestValueId = (plans.data || []).length > 1 ? [...(plans.data || [])].sort((a, b) => (a.price / a.duration) - (b.price / b.duration))[0].id : null;
+  const bestValueId = visiblePlans.length > 1 ? [...visiblePlans].sort((a, b) => (a.price / a.duration) - (b.price / b.duration))[0].id : null;
 
   const applyCoupon = async () => {
     if (!planId || !couponInput.trim()) return;
@@ -182,6 +189,7 @@ function Register() {
       // Enter inside a step-1 field means "continue", never "submit".
       if (step === 1) { goNext(); return; }
       setError(null);
+      if (courseYears.length && !courseYearId) { fail('Please select your course year.'); return; }
       if (!planId) { fail('Please choose a membership plan.'); return; }
       if (!isFreePlan && !proof) { fail('Please upload your payment proof before submitting.'); return; }
       const f = new FormData(e.currentTarget);
@@ -191,7 +199,7 @@ function Register() {
       register.mutate({
         name: String(f.get('name')).trim(), email, password: String(f.get('password')),
         phone: String(f.get('phone')).trim(),
-        matricMarks: Number(matric.marks), matricTotal: Number(matric.total), fscMarks: Number(fsc.marks), fscTotal: Number(fsc.total), planId, proofPath: isFreePlan ? undefined : proof?.storagePath,
+        matricMarks: Number(matric.marks), matricTotal: Number(matric.total), fscMarks: Number(fsc.marks), fscTotal: Number(fsc.total), planId, courseYearId: courseYearId ?? undefined, proofPath: isFreePlan ? undefined : proof?.storagePath,
         couponCode: isFreePlan ? undefined : couponResult?.code,
       });
     }}>
@@ -234,16 +242,25 @@ function Register() {
           <button type="button" onClick={goBack} className="au-recap__edit" data-testid="button-register-edit-details">Edit</button>
         </div>}
 
+        {courseYears.length > 0 && <div className="mt-6">
+          <label className="au-fieldset-label" htmlFor="reg-course-year">Course year</label>
+          <select id="reg-course-year" required className="au-input au-input--plain" value={courseYearId ?? ''} onChange={(e) => { setCourseYearId(e.target.value ? Number(e.target.value) : null); setPlanId(null); setCouponResult(null); setCouponError(null); }} data-testid="select-register-course-year">
+            <option value="">Select your course year</option>
+            {courseYears.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>}
+
         <div className="mt-6">
           <div className="au-fieldset-label" id="reg-plan-label">Membership plan</div>
           <div className="au-plans" role="group" aria-labelledby="reg-plan-label">
-            {(plans.data || []).map((plan) => <button type="button" key={plan.id} aria-pressed={planId === plan.id} onClick={() => setPlanId(plan.id)} className="au-plan" data-testid={`button-select-plan-${plan.id}`}>
+            {(courseYears.length === 0 || courseYearId != null) && visiblePlans.map((plan) => <button type="button" key={plan.id} aria-pressed={planId === plan.id} onClick={() => setPlanId(plan.id)} className="au-plan" data-testid={`button-select-plan-${plan.id}`}>
               {plan.id === bestValueId ? <span className="au-plan__badge">Best value</span> : plan.discountLabel ? <span className="au-plan__badge">{plan.discountLabel}</span> : null}
               <span className="au-plan__radio" aria-hidden="true"><Check size={13} strokeWidth={3} /></span>
               <span className="min-w-0"><span className="au-plan__name block">{plan.name}</span><span className="au-plan__meta block">{plan.duration} {plan.durationUnit} access</span></span>
               <span className="au-plan__price">{plan.originalPrice != null && plan.originalPrice > plan.price && <span className="au-plan__was">{money(plan.originalPrice, plan.currency)}</span>}{Number(plan.price) <= 0 ? 'Free' : money(plan.price, plan.currency)}</span>
             </button>)}
-            {!plans.data?.length && <p className="au-hint">{plans.isLoading ? 'Loading plans…' : 'No membership plans are available yet — ask an admin to add one.'}</p>}
+            {courseYears.length > 0 && courseYearId == null && <p className="au-hint">Select your course year to see the plans and fees for it.</p>}
+            {(courseYears.length === 0 || courseYearId != null) && !visiblePlans.length && <p className="au-hint">{plans.isLoading ? 'Loading plans…' : 'No membership plans are available for this course year yet — ask an admin to add one.'}</p>}
           </div>
         </div>
 

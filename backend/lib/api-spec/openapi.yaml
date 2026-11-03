@@ -482,6 +482,7 @@ components:
         durationUnit: { type: string }
         active: { type: boolean }
         displayOrder: { type: integer }
+        courseYearIds: { type: array, items: { type: integer } }
     MembershipPlanInput:
       type: object
       required: [name, description, price, currency, duration, durationUnit]
@@ -494,6 +495,7 @@ components:
         durationUnit: { type: string }
         active: { type: boolean }
         displayOrder: { type: integer }
+        courseYearIds: { type: array, items: { type: integer } }
     MembershipPlanUpdate:
       type: object
       properties:
@@ -505,6 +507,7 @@ components:
         durationUnit: { type: string }
         active: { type: boolean }
         displayOrder: { type: integer }
+        courseYearIds: { type: array, items: { type: integer } }
     Payment:
       type: object
       required: [id, studentName, institution, program, planName, amount, currency, method, reference, paymentDate, status, submittedAt]

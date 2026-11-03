@@ -14,6 +14,7 @@ import {
   auditLogsTable,
   paymentsTable,
   membershipPlansTable,
+  courseYearsTable,
   membershipsTable,
 } from "@workspace/db";
 import {
@@ -73,6 +74,7 @@ async function userPublicView(user: typeof usersTable.$inferSelect) {
   const [institution] = user.institutionId ? await db.select().from(institutionsTable).where(eq(institutionsTable.id, user.institutionId)) : [];
   const [program] = user.programId ? await db.select().from(programsTable).where(eq(programsTable.id, user.programId)) : [];
   const [academicYear] = user.academicYearId ? await db.select().from(academicYearsTable).where(eq(academicYearsTable.id, user.academicYearId)) : [];
+  const [courseYear] = user.courseYearId ? await db.select().from(courseYearsTable).where(eq(courseYearsTable.id, user.courseYearId)) : [];
   return {
     id: user.id,
     name: user.name,
@@ -89,6 +91,8 @@ async function userPublicView(user: typeof usersTable.$inferSelect) {
     programId: user.programId,
     academicYearId: user.academicYearId,
     batchId: user.batchId,
+    courseYearId: user.courseYearId ?? null,
+    courseYear: courseYear?.name ?? null,
     rollNumber: user.rollNumber,
     phone: user.phone,
     matricMarks: user.matricMarks,
@@ -168,6 +172,9 @@ const RegisterSchema = z.object({
   // Payment is collected as part of account creation — students choose a
   // plan and submit proof up front rather than registering "free" first.
   planId: z.coerce.number().int().positive(),
+  // Course year (FSc-I / FSc-II ...) — required whenever the admin has set up
+  // at least one active course year; checked in the handler below.
+  courseYearId: z.coerce.number().int().positive().optional(),
   // Optional — validated against med_coupons in the handler below (same
   // validateCoupon() helper POST /coupons/validate uses), discounts the
   // amount recorded on the signup payment row. Coupons only ever apply to
@@ -231,6 +238,21 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
+  // Course year: when the admin has defined any active course years the
+  // student must pick one, and the chosen plan must be sold for it.
+  const activeCourseYears = await db.select().from(courseYearsTable).where(eq(courseYearsTable.active, true));
+  let courseYearId: number | null = null;
+  if (activeCourseYears.length) {
+    const picked = activeCourseYears.find((c) => c.id === data.courseYearId);
+    if (!picked) { res.status(400).json({ error: "Please select your course year" }); return; }
+    courseYearId = picked.id;
+  }
+  const planCourseYears = plan.courseYearIds ?? [];
+  if (planCourseYears.length && (courseYearId === null || !planCourseYears.includes(courseYearId))) {
+    res.status(400).json({ error: "This plan isn't available for your course year" });
+    return;
+  }
+
   // A plan priced at zero (e.g. the Trial plan) needs no payment, so it needs
   // no proof either — and no admin review. Every paid plan still requires proof.
   const isFreePlan = Number(plan.price) <= 0;
@@ -264,6 +286,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       institutionId: institution.id,
       programId: program.id,
       academicYearId: academicYear.id,
+      courseYearId,
       rollNumber: data.rollNumber?.trim(),
       phone: data.phone.trim(),
       matricMarks: data.matricMarks,

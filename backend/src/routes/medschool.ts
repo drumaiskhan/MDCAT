@@ -178,7 +178,16 @@ async function getTopicMcqCount(topicId: number): Promise<number> {
 }
 
 function planView(plan: typeof membershipPlansTable.$inferSelect) {
-  return { ...plan, price: Number(plan.price), originalPrice: plan.originalPrice !== null ? Number(plan.originalPrice) : null };
+  return { ...plan, price: Number(plan.price), originalPrice: plan.originalPrice !== null ? Number(plan.originalPrice) : null, courseYearIds: plan.courseYearIds ?? [] };
+}
+
+// A plan with no course years is open to everyone; otherwise the student's
+// course year must be one of the plan's. A combined plan lists both years, so
+// FSc-I and FSc-II students each see (and may buy) it.
+function planAllowsCourseYear(plan: { courseYearIds: number[] | null }, courseYearId: number | null | undefined): boolean {
+  const ids = plan.courseYearIds ?? [];
+  if (!ids.length) return true;
+  return courseYearId != null && ids.includes(courseYearId);
 }
 
 async function userView(userId: number) {
@@ -338,7 +347,12 @@ router.get("/admin/dashboard", requireAdmin, async (_req, res): Promise<void> =>
 router.get("/membership-plans", async (req, res): Promise<void> => {
   const includeInactive = req.user && (isAdminRole(req.user.role));
   const plans = await db.select().from(membershipPlansTable).where(includeInactive ? undefined : eq(membershipPlansTable.active, true)).orderBy(membershipPlansTable.displayOrder);
-  res.json(ListMembershipPlansResponse.parse(plans.map(planView)));
+  // Optional ?courseYearId= narrows the list to plans sold for that course
+  // year (plus plans open to all). The admin panel omits it to see everything.
+  const cyRaw = req.query.courseYearId;
+  const cyId = typeof cyRaw === "string" && cyRaw.trim() !== "" ? Number(cyRaw) : null;
+  const visible = cyId != null && !Number.isNaN(cyId) ? plans.filter((p) => planAllowsCourseYear(p, cyId)) : plans;
+  res.json(ListMembershipPlansResponse.parse(visible.map(planView)));
 });
 
 router.post("/membership-plans", requireAdmin, async (req, res): Promise<void> => {
@@ -351,6 +365,7 @@ router.post("/membership-plans", requireAdmin, async (req, res): Promise<void> =
     discountLabel: parsed.data.discountLabel ?? null,
     active: parsed.data.active ?? true,
     displayOrder: parsed.data.displayOrder ?? 0,
+    courseYearIds: [...new Set(parsed.data.courseYearIds ?? [])],
   }).returning();
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "PLAN_CREATED", entity: "membership_plan", entityId: plan.id });
   res.status(201).json(CreateMembershipPlanResponse.parse(planView(plan)));
@@ -364,6 +379,7 @@ router.patch("/membership-plans/:id", requireAdmin, async (req, res): Promise<vo
     ...body.data,
     price: body.data.price === undefined ? undefined : String(body.data.price),
     originalPrice: body.data.originalPrice === undefined ? undefined : (body.data.originalPrice != null ? String(body.data.originalPrice) : null),
+    courseYearIds: body.data.courseYearIds === undefined ? undefined : [...new Set(body.data.courseYearIds)],
   }).where(eq(membershipPlansTable.id, params.data.id)).returning();
   if (!plan) { res.status(404).json({ error: "Membership plan not found" }); return; }
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "PLAN_UPDATED", entity: "membership_plan", entityId: plan.id });
@@ -413,6 +429,9 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [plan] = await db.select().from(membershipPlansTable).where(and(eq(membershipPlansTable.id, parsed.data.planId), eq(membershipPlansTable.active, true)));
   if (!plan) { res.status(400).json({ error: "Selected plan is not available" }); return; }
+  const [payer] = await db.select({ courseYearId: usersTable.courseYearId }).from(usersTable).where(eq(usersTable.id, req.user!.id));
+  // Students who signed up before course years existed have none on file — don't lock them out of renewing.
+  if (payer?.courseYearId != null && !planAllowsCourseYear(plan, payer.courseYearId)) { res.status(400).json({ error: "This plan isn't available for your course year" }); return; }
   // couponCode isn't part of the generated SubmitPaymentBody schema (that
   // schema is auto-generated from openapi.yaml — see lib/api-zod — so it's
   // read directly off the body here rather than hand-editing generated

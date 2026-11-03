@@ -174,7 +174,8 @@ export const ListMembershipPlansResponseItem = zod.object({
   "duration": zod.int(),
   "durationUnit": zod.string(),
   "active": zod.boolean(),
-  "displayOrder": zod.int()
+  "displayOrder": zod.int(),
+  "courseYearIds": zod.array(zod.int()).optional()
 })
 export const ListMembershipPlansResponse = zod.array(ListMembershipPlansResponseItem)
 
@@ -197,7 +198,8 @@ export const CreateMembershipPlanBody = zod.object({
   "duration": zod.int().min(1),
   "durationUnit": zod.string(),
   "active": zod.boolean().optional(),
-  "displayOrder": zod.int().optional()
+  "displayOrder": zod.int().optional(),
+  "courseYearIds": zod.array(zod.int()).optional()
 })
 
 export const CreateMembershipPlanResponse = zod.object({
@@ -211,7 +213,8 @@ export const CreateMembershipPlanResponse = zod.object({
   "duration": zod.int(),
   "durationUnit": zod.string(),
   "active": zod.boolean(),
-  "displayOrder": zod.int()
+  "displayOrder": zod.int(),
+  "courseYearIds": zod.array(zod.int()).optional()
 })
 
 
@@ -237,7 +240,8 @@ export const UpdateMembershipPlanBody = zod.object({
   "duration": zod.int().min(1).optional(),
   "durationUnit": zod.string().optional(),
   "active": zod.boolean().optional(),
-  "displayOrder": zod.int().optional()
+  "displayOrder": zod.int().optional(),
+  "courseYearIds": zod.array(zod.int()).optional()
 })
 
 export const UpdateMembershipPlanResponse = zod.object({
@@ -251,7 +255,8 @@ export const UpdateMembershipPlanResponse = zod.object({
   "duration": zod.int(),
   "durationUnit": zod.string(),
   "active": zod.boolean(),
-  "displayOrder": zod.int()
+  "displayOrder": zod.int(),
+  "courseYearIds": zod.array(zod.int()).optional()
 })
 
 

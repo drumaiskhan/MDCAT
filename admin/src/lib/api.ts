@@ -954,6 +954,14 @@ export const academicApi = {
   archiveBatch: (id: number) => request<Batch>(`/batches/${id}`, { method: 'DELETE' }),
 };
 
+export interface CourseYear { id: number; name: string; active: boolean; displayOrder: number }
+export const courseYearsApi = {
+  list: () => request<CourseYear[]>('/course-years'),
+  create: (body: { name: string }) => request<CourseYear>('/course-years', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: number, body: Partial<Pick<CourseYear, 'name' | 'active' | 'displayOrder'>>) => request<CourseYear>(`/course-years/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: number) => request<{ ok: true }>(`/course-years/${id}`, { method: 'DELETE' }),
+};
+
 // ---------------------------------------------------------------------------
 // Subjects & topics (nested under a module — created inline from the
 // Academic content screen so admins don't need to leave the module list to

@@ -502,7 +502,7 @@ export const couponsApi = {
 };
 
 export const authApi = {
-  register: (body: { name: string; email: string; password: string; phone: string; rollNumber?: string; matricMarks: number; matricTotal: number; fscMarks: number; fscTotal: number; planId: number; method?: string; reference?: string; paymentDate?: string; proofPath?: string; couponCode?: string }) =>
+  register: (body: { name: string; email: string; password: string; phone: string; rollNumber?: string; matricMarks: number; matricTotal: number; fscMarks: number; fscTotal: number; planId: number; courseYearId?: number; method?: string; reference?: string; paymentDate?: string; proofPath?: string; couponCode?: string }) =>
     request<{ user: AuthUser; message: string }>('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   adminRegister: (body: { name: string; email: string; password: string; inviteCode: string }) =>
     request<{ token: string; user: AuthUser }>('/auth/admin/register', { method: 'POST', body: JSON.stringify(body) }),
@@ -550,6 +550,11 @@ export const academicApi = {
   createBatch: (body: Partial<Batch>) => request<Batch>('/batches', { method: 'POST', body: JSON.stringify(body) }),
   updateBatch: (id: number, body: Partial<Batch>) => request<Batch>(`/batches/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   archiveBatch: (id: number) => request<Batch>(`/batches/${id}`, { method: 'DELETE' }),
+};
+
+export interface CourseYear { id: number; name: string; active: boolean; displayOrder: number }
+export const courseYearsApi = {
+  list: () => request<CourseYear[]>('/course-years'),
 };
 
 // ---------------------------------------------------------------------------

@@ -61,6 +61,8 @@ export interface MembershipPlan {
   durationUnit: string;
   active: boolean;
   displayOrder: number;
+  /** Course years (ids) this plan is sold for; empty/absent = all. */
+  courseYearIds?: number[];
 }
 
 export interface MembershipPlanInput {
@@ -78,6 +80,8 @@ export interface MembershipPlanInput {
   durationUnit: string;
   active?: boolean;
   displayOrder?: number;
+  /** Course years (ids) this plan is sold for; empty/absent = all. */
+  courseYearIds?: number[];
 }
 
 export interface MembershipPlanUpdate {
@@ -95,6 +99,8 @@ export interface MembershipPlanUpdate {
   durationUnit?: string;
   active?: boolean;
   displayOrder?: number;
+  /** Course years (ids) this plan is sold for; empty/absent = all. */
+  courseYearIds?: number[];
 }
 
 export interface Payment {

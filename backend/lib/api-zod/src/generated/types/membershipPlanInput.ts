@@ -21,4 +21,6 @@ export interface MembershipPlanInput {
   durationUnit: string;
   active?: boolean;
   displayOrder?: number;
+  /** Course years (ids) this plan is sold for; empty/absent = all. */
+  courseYearIds?: number[];
 }

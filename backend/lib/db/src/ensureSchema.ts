@@ -768,6 +768,17 @@ ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS eligibility TEXT;
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS original_price NUMERIC(12, 2);
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS discount_label TEXT;
 
+CREATE TABLE IF NOT EXISTS med_course_years (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_users ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
+
 -- med_modules: optional Block grouping (added after med_modules' initial
 -- CREATE TABLE ran in production) — nullable so existing modules keep
 -- working ungrouped ("Unassigned modules") until an admin assigns one.

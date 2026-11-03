@@ -714,6 +714,17 @@ ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS eligibility TEXT;
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS original_price NUMERIC(12, 2);
 ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS discount_label TEXT;
 
+CREATE TABLE IF NOT EXISTS med_course_years (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE med_membership_plans ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE med_users ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
+
 ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS block_id INTEGER;
 -- Round 3, item 7: optional module thumbnail (see schema/medschool.ts).
 ALTER TABLE med_modules ADD COLUMN IF NOT EXISTS icon_path TEXT;

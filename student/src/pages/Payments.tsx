@@ -60,7 +60,11 @@ function Payments() {
   const payQ = useListPayments();
   const paymentDetails = useQuery({ queryKey: ['payment-details'], queryFn: publicApi.paymentDetails });
   const dashboard = useGetStudentDashboard();
-  const plans = plansQ.data ?? [];
+  // Show only plans sold for this student's course year (plus plans open to all).
+  // Students with no course year on file (older accounts) still see every plan.
+  const meQ = useGetCurrentUser();
+  const myCourseYearId = (meQ.data as { courseYearId?: number | null } | undefined)?.courseYearId ?? null;
+  const plans = (plansQ.data ?? []).filter((p) => { const ids = p.courseYearIds ?? []; return !ids.length || myCourseYearId == null || ids.includes(myCourseYearId); });
   const payments = payQ.data ?? [];
   const isActive = dashboard.data?.membershipStatus === 'ACTIVE';
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
