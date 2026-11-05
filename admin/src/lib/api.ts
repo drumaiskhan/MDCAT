@@ -610,19 +610,86 @@ export const mcqAdminApi = {
     request<{ fixed: number; results: Array<{ id: number; fixed: boolean }> }>('/admin/mcqs/reference-batch', { method: 'POST', body: JSON.stringify({ ids }) }),
 };
 
+// Pieces stay well under the few-MB request limit many shared hosts enforce.
+const PARSE_PIECE_BYTES = 400 * 1024;
+
+function splitTextForParse(text: string, isCsv: boolean): string[] {
+  const lines = text.split(/\r?\n/);
+  const header = isCsv ? lines[0] : null; // csv pieces each need the header row
+  const body = isCsv ? lines.slice(1) : lines;
+  const pieces: string[] = [];
+  let cur: string[] = [];
+  let size = 0;
+  const flush = () => { if (cur.length) { pieces.push((header !== null ? header + '\n' : '') + cur.join('\n')); cur = []; size = 0; } };
+  for (let i = 0; i < body.length; i++) {
+    cur.push(body[i]); size += body[i].length + 1;
+    // Cut only at a blank line (question boundary) once the piece is full; a
+    // hard cut at 2x the target stops a file with no blank lines from
+    // producing one giant piece.
+    const blank = body[i].trim() === '';
+    if (size >= PARSE_PIECE_BYTES && (blank || isCsv)) flush();
+    else if (size >= PARSE_PIECE_BYTES * 2) flush();
+  }
+  flush();
+  return pieces.length ? pieces : [text];
+}
+
+async function parseOnePiece(file: File, profileId?: number): Promise<McqParseResult> {
+  const send = async () => {
+    const form = new FormData();
+    form.append('file', file);
+    if (profileId) form.append('profileId', String(profileId));
+    return fetchOrThrow(`${API_ORIGIN}/api/admin/mcq-import/parse`, { method: 'POST', credentials: 'include', body: form });
+  };
+  let res: Response;
+  try { res = await send(); }
+  catch (err) {
+    // One retry: a Passenger/proxy hiccup often clears immediately.
+    try { res = await send(); }
+    catch {
+      const mb = (file.size / 1048576).toFixed(1);
+      throw new ApiRequestError(0, `Could not upload "${file.name}" (${mb} MB): the connection to the API dropped before any reply. Check that the API is running (open ${API_ORIGIN}/api/health), and if this is a large PDF/Word/Excel file, ask your host to allow request bodies of 25 MB or more (Apache LimitRequestBody) or save the questions as a .txt file.`, (err as ApiRequestError).data);
+    }
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not parse this file', data);
+  return data;
+}
+
 export const mcqImportApi = {
   profiles: () => request<McqImportProfile[]>('/admin/mcq-import-profiles'),
   createProfile: (body: Omit<McqImportProfile, 'id'>) => request<McqImportProfile>('/admin/mcq-import-profiles', { method: 'POST', body: JSON.stringify(body) }),
   updateProfile: (id: number, body: Partial<Omit<McqImportProfile, 'id'>>) => request<McqImportProfile>(`/admin/mcq-import-profiles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProfile: (id: number) => request<{ ok: true }>(`/admin/mcq-import-profiles/${id}`, { method: 'DELETE' }),
   parse: async (file: File, profileId?: number): Promise<McqParseResult> => {
-    const form = new FormData();
-    form.append('file', file);
-    if (profileId) form.append('profileId', String(profileId));
-    const res = await fetchOrThrow(`${API_ORIGIN}/api/admin/mcq-import/parse`, { method: 'POST', credentials: 'include', body: form });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new ApiRequestError(res.status, (data && data.error) || 'Could not parse this file', data);
-    return data;
+    // The host in front of the API (cPanel/Apache/LiteSpeed) drops large
+    // multipart bodies with no response at all, which the browser reports as
+    // a bare network error ("request never reached the server"). Plain-text
+    // sources (.txt/.csv) are therefore read in the browser and sent in
+    // small pieces (split on blank lines so a question is never cut in
+    // half); the candidates of every piece are merged. Binary formats
+    // (.pdf/.docx/.xlsx) can't be split, so they go up as one request.
+    // Copy the picked file into memory first. On Android/mobile browsers a
+    // file chosen from the picker can become unreadable by the time it is
+    // posted (the picker's handle goes stale, e.g. after the panel re-renders
+    // or the screen sleeps) and the browser then fails the upload with a bare
+    // network error that looks exactly like a dead server. An in-memory copy
+    // can't go stale, and if the original is already unreadable we say so.
+    try { file = new File([await file.arrayBuffer()], file.name, { type: file.type }); }
+    catch { throw new ApiRequestError(0, `Could not read "${file.name}" from your device. Tap "Choose File" and select it again, then press Parse file.`, null); }
+    const lower = file.name.toLowerCase();
+    const isText = lower.endsWith('.txt') || lower.endsWith('.csv');
+    if (!isText || file.size <= PARSE_PIECE_BYTES) return parseOnePiece(file, profileId);
+
+    const text = await file.text();
+    const pieces = splitTextForParse(text, lower.endsWith('.csv'));
+    const merged: McqCandidate[] = [];
+    for (let i = 0; i < pieces.length; i++) {
+      const piece = new File([pieces[i]], file.name, { type: file.type || 'text/plain' });
+      const part = await parseOnePiece(piece, profileId);
+      merged.push(...part.candidates);
+    }
+    return { fileName: file.name, totalFound: merged.length, needsReviewCount: merged.filter((c) => c.needsReview).length, candidates: merged };
   },
   commit: (body: { moduleId?: number; subjectId?: number; topicId?: number; pastPaperId?: number; examId?: number; status: 'draft' | 'published'; mcqs: McqCandidate[] }) =>
     request<{ imported: number; ids: number[] }>('/admin/mcq-import/commit', { method: 'POST', body: JSON.stringify(body) }),
