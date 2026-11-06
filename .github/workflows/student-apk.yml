@@ -1,3 +1,4 @@
+
 name: Build Student APK
 
 on:
@@ -34,6 +35,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: student/package-lock.json
 
       - name: Setup npm
         run: npm install --global npm@10.9.4
@@ -69,29 +72,34 @@ jobs:
             exit 1
           fi
 
+      # Avoid the obsolete SDK package "tools".
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools'
-        with:
-          packages: 'platform-tools'
         with:
           packages: 'platform-tools'
 
       - name: Install Android SDK 36
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          sdkmanager --licenses
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "platform-tools"
+
+      - name: Verify Android SDK
+        run: |
+          sdkmanager --list_installed
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Sync Capacitor Android
         run: npx cap sync android
         env:
           SITE_URL: ${{ inputs.site_url }}
 
-      - name: Verify generated Capacitor Android references
+      - name: Verify Capacitor Android references
         run: |
           grep -n "capacitor-android" android/capacitor.settings.gradle
-          grep -n "capacitor-android@8" android/capacitor.settings.gradle
+
           if grep -q "capacitor-android@7" android/capacitor.settings.gradle; then
             echo "ERROR: Stale Capacitor 7 Android reference found."
             exit 1
@@ -101,15 +109,17 @@ jobs:
         run: |
           chmod +x android/gradlew
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Verify APK
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
+
           if [ ! -f "$APK" ]; then
             echo "ERROR: APK was not generated."
             exit 1
           fi
+
           ls -lh "$APK"
 
       - name: Upload APK
