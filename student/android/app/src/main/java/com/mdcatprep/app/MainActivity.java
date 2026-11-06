@@ -1,4 +1,4 @@
-﻿package com.mdcatprep.app;
+package com.mdcatprep.app;
 
 import com.getcapacitor.BridgeActivity;
 
