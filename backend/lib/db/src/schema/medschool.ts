@@ -425,6 +425,9 @@ export const topicsTable = pgTable("med_topics", {
   active: boolean("active").notNull().default(true),
   archived: boolean("archived").notNull().default(false),
   displayOrder: integer("display_order").notNull().default(0),
+  // Admin "Hide MCQs" switch: while true the topic's practice MCQs are kept
+  // out of student view (their status is "hidden") until the admin shows them.
+  mcqsHidden: boolean("mcqs_hidden").notNull().default(false),
   ...timestamps,
 });
 

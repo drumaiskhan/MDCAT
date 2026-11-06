@@ -169,7 +169,7 @@ export interface McqImportProfile { id: number; name: string; questionPattern: s
 // It's a suggestion only; no review UI reads/edits it yet and commit
 // doesn't act on it (no module/subject/topic gets created or matched from
 // it) — see AI_HANDOFF_ENRICHED_IMPORT.md for wiring this up.
-export interface McqCandidate { question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null; reference: string | null; hint: string | null; needsReview: boolean; rawBlock?: string; difficulty: 'easy' | 'moderate' | 'hard'; suggestedPath?: { block: string | null; module: string | null; subject: string | null; topic: string | null } | null }
+export interface McqCandidate { question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null; reference: string | null; hint: string | null; needsReview: boolean; rawBlock?: string; difficulty: 'easy' | 'moderate' | 'hard'; subjectId?: number | null; suggestedPath?: { block: string | null; module: string | null; subject: string | null; topic: string | null } | null }
 export interface McqParseResult { fileName: string; totalFound: number; needsReviewCount: number; candidates: McqCandidate[] }
 
 export interface FlashcardCandidate { front: string; back: string; needsReview: boolean; rawBlock?: string }
@@ -1042,11 +1042,16 @@ export const subjectAdminApi = {
   remove: (id: number) => request<{ ok: true }>(`/subjects/${id}`, { method: 'DELETE' }),
 };
 
+export interface TopicMcqVisibility { topicId: number; hidden: boolean; published: number; hiddenCount: number }
 export const topicAdminApi = {
   list: (subjectId?: number) => request<AdminTopic[]>(`/topics${subjectId ? `?subjectId=${subjectId}` : ''}`),
   create: (body: { subjectId: number; chapterId?: number | null; name: string; active?: boolean; displayOrder?: number }) => request<AdminTopic>('/topics', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: number, body: Partial<{ name: string; chapterId: number | null; active: boolean; displayOrder: number }>) => request<AdminTopic>(`/topics/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: number) => request<{ ok: true }>(`/topics/${id}`, { method: 'DELETE' }),
+  /** Per-topic "MCQs hidden from students" state + counts (practice MCQs only). */
+  mcqVisibility: () => request<TopicMcqVisibility[]>('/admin/topics/mcq-visibility'),
+  /** visible=false hides the topic's published MCQs from students; true shows them again. */
+  setMcqVisible: (id: number, visible: boolean) => request<{ ok: true; topicId: number; hidden: boolean; changed: number }>(`/topics/${id}/mcq-visibility`, { method: 'POST', body: JSON.stringify({ visible }) }),
   /** Move topics into a chapter (chapterId = null takes them out of any chapter). */
   move: (topicIds: number[], chapterId: number | null) => request<{ ok: true; moved: number }>('/topics/move', { method: 'POST', body: JSON.stringify({ topicIds, chapterId }) }),
 };

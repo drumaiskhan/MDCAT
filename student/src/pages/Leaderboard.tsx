@@ -21,7 +21,7 @@ const RANGES: Array<{ value: string; label: string }> = [
 const METRIC_ICON: Record<MetricKey, typeof Trophy> = { points: Trophy, accuracy: Target, streak: Flame, questions: Zap };
 
 function LiveBadge() {
-  return <span className="d3-well inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold text-muted-foreground"><span className="relative flex size-1.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" /><span className="relative inline-flex size-1.5 rounded-full bg-primary" /></span>Live</span>;
+  return <span className="lb2-live"><span className="lb2-live__dot" />Updates live</span>;
 }
 
 // Rows are revealed in pages (instead of mounting the whole class at once) and
@@ -68,7 +68,7 @@ function Leaderboard() {
   // Typing stays instant; filtering the list runs at a lower priority.
   const deferredSearch = useDeferredValue(search);
   const q = deferredSearch.trim().toLowerCase();
-  const listRows = useMemo(() => (q ? ranked.filter((r) => r.name.toLowerCase().includes(q) || (r.institution ?? '').toLowerCase().includes(q)) : ranked.slice(top3.length)), [q, ranked, top3.length]);
+  const listRows = useMemo(() => (q ? ranked.filter((r) => r.name.toLowerCase().includes(q)) : ranked.slice(top3.length)), [q, ranked, top3.length]);
   useEffect(() => { setCount(PAGE); }, [range, metricKey, q]);
   const maxValue = useMemo(() => qualified.reduce((m, r) => Math.max(m, metric.value(r)), 0), [qualified, metric]);
   const periodLabel = (RANGES.find((r) => r.value === range)?.label ?? 'Monthly').toLowerCase();
@@ -93,25 +93,25 @@ function Leaderboard() {
     document.getElementById('lb-hero')?.scrollIntoView({ behavior, block: 'center' });
   };
 
-  const header = <SectionHeader eyebrow="Community" title="Leaderboard" description="See how you rank against other students — and keep your streak alive." action={<LiveBadge />} />;
-  if (board.isLoading) return <div>{header}<SkeletonPage /></div>;
+  const header = <SectionHeader title="Leaderboard" description="See how you rank against other students — and keep your streak alive." action={<LiveBadge />} />;
+  if (board.isLoading) return <div className="lb2">{header}<SkeletonPage /></div>;
 
-  return <div>
+  return <div className="lb2">
     {header}
     {board.isError ? <EmptyState
       icon={AlertTriangle}
       title="Couldn't load the leaderboard"
       body={board.error instanceof ApiRequestError ? board.error.message : 'Something went wrong reaching the server. Check your connection and try again.'}
-      action={<button onClick={() => board.refetch()} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-primary-foreground" data-testid="button-retry-leaderboard"><RotateCcw size={13} /> Try again</button>}
+      action={<button onClick={() => board.refetch()} className="studio-button" data-testid="button-retry-leaderboard"><RotateCcw size={13} /> Try again</button>}
     /> : <>
       <StandingHero you={you} ranked={ranked} rankedCount={qualified.length} metric={metric} streak={streakQ.data} periodLabel={periodLabel} />
 
-      <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <SegTabs ariaLabel="Time range" className="lg:w-[26rem]" value={range} onChange={(v: string) => setRange(v)} options={RANGES.map((r) => ({ value: r.value, label: r.label, testId: `button-range-${r.value}` }))} />
         <SegTabs ariaLabel="Rank by" scroll className="lg:w-[30rem]" value={metricKey} onChange={(v: MetricKey) => setMetricKey(v)}
           options={METRIC_ORDER.map((k) => { const Icon = METRIC_ICON[k]; return { value: k, label: <><Icon size={13} />{METRICS[k].label}</>, testId: `button-metric-${k}` }; })} />
       </div>
-      <p className="mt-2.5 px-1 text-[11px] font-semibold text-muted-foreground" data-testid="text-metric-note">{metric.note}</p>
+      <p className="lb2-note" data-testid="text-metric-note">{metric.note}</p>
 
       {!board.data?.length ? <div className="mt-4"><EmptyState icon={Trophy} title="No activity yet" body="Complete a practice session to appear on the leaderboard." /></div> : <>
         {!q && top3.length > 0 && <Podium3D rows={top3} metric={metric} />}
@@ -120,15 +120,15 @@ function Leaderboard() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1 sm:max-w-sm">
             <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input value={search} onChange={(e: { target: { value: string } }) => setSearch(e.target.value)} placeholder="Find a student or college…" aria-label="Search the leaderboard" className="lbx-search w-full pl-10 pr-9 text-xs font-semibold outline-none" data-testid="input-leaderboard-search" />
+            <input value={search} onChange={(e: { target: { value: string } }) => setSearch(e.target.value)} placeholder="Find a student…" aria-label="Search the leaderboard" className="lb2-search w-full pl-10 pr-9 outline-none" data-testid="input-leaderboard-search" />
             {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear search" className="no-3d absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground hover:bg-muted"><X size={13} /></button>}
           </div>
-          <span className="lbx-count">{q ? `${listRows.length} match${listRows.length === 1 ? '' : 'es'}` : `${qualified.length} ranked${ranked.length > qualified.length ? ` · ${ranked.length - qualified.length} unranked` : ''}`}</span>
+          <span className="lb2-count">{q ? `${listRows.length} match${listRows.length === 1 ? '' : 'es'}` : `${qualified.length} ranked${ranked.length > qualified.length ? `, ${ranked.length - qualified.length} unranked` : ''}`}</span>
         </div>
 
-        <div className="mt-3 space-y-2.5" data-testid="list-leaderboard">
+        <div className="lb2-list" data-testid="list-leaderboard">
           <RankList rows={listRows} metric={metric} max={maxValue} count={count} setCount={setCount} />
-          {!listRows.length && <EmptyState icon={Search} title={q ? 'No one matches that search' : 'That’s the whole podium'} body={q ? 'Try a different name or college.' : 'Everyone on this board is already up on the podium.'} />}
+          {!listRows.length && <EmptyState icon={Search} title={q ? 'No one matches that search' : 'That’s the whole podium'} body={q ? 'Try a different name.' : 'Everyone on this board is already up on the podium.'} />}
         </div>
       </>}
       <YouDock you={you} metric={metric} show={dockShow} onJump={jumpToMe} />

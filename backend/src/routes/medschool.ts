@@ -963,6 +963,36 @@ router.patch("/topics/:id", requireAdmin, async (req, res): Promise<void> => {
   res.json({ id: row.id, subjectId: row.subjectId, chapterId: row.chapterId, name: row.name, questionCount: await getTopicMcqCount(row.id), completed: false, displayOrder: row.displayOrder });
 });
 
+// ---- Per-topic MCQ visibility ("Hide / Show" in the admin question bank) ----
+// Hiding sets the topic's practice MCQs from "published" to "hidden" (drafts stay
+// drafts; past-paper / exam questions are never touched). Showing flips them back.
+// Every student query already filters on status = "published", so nothing else
+// needs to know about the switch.
+router.get("/admin/topics/mcq-visibility", requireAdmin, async (_req, res): Promise<void> => {
+  const topics = await db.select({ id: topicsTable.id, hidden: topicsTable.mcqsHidden }).from(topicsTable).where(eq(topicsTable.archived, false));
+  const counts = await db.select({ topicId: mcqsTable.topicId, status: mcqsTable.status, n: sql<number>`count(*)::int` }).from(mcqsTable)
+    .where(and(isNull(mcqsTable.pastPaperId), isNull(mcqsTable.examId), sql`${mcqsTable.topicId} IS NOT NULL`))
+    .groupBy(mcqsTable.topicId, mcqsTable.status);
+  const by = new Map<number, { published: number; hidden: number }>();
+  for (const c of counts) { if (c.topicId == null) continue; const e = by.get(c.topicId) ?? { published: 0, hidden: 0 }; if (c.status === "published") e.published += Number(c.n); if (c.status === "hidden") e.hidden += Number(c.n); by.set(c.topicId, e); }
+  res.json(topics.map((t) => ({ topicId: t.id, hidden: t.hidden, published: by.get(t.id)?.published ?? 0, hiddenCount: by.get(t.id)?.hidden ?? 0 })));
+});
+
+router.post("/topics/:id/mcq-visibility", requireAdmin, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const parsed = z.object({ visible: z.boolean() }).safeParse(req.body);
+  if (!parsed.success || !Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid request" }); return; }
+  const [topic] = await db.update(topicsTable).set({ mcqsHidden: !parsed.data.visible }).where(eq(topicsTable.id, id)).returning();
+  if (!topic) { res.status(404).json({ error: "Topic not found" }); return; }
+  const scope = and(eq(mcqsTable.topicId, id), isNull(mcqsTable.pastPaperId), isNull(mcqsTable.examId));
+  const changed = await db.update(mcqsTable)
+    .set({ status: parsed.data.visible ? "published" : "hidden" })
+    .where(and(scope, eq(mcqsTable.status, parsed.data.visible ? "hidden" : "published")))
+    .returning({ id: mcqsTable.id });
+  await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: parsed.data.visible ? "TOPIC_MCQS_SHOWN" : "TOPIC_MCQS_HIDDEN", entity: "topic", entityId: id, metadata: JSON.stringify({ mcqs: changed.length }) });
+  res.json({ ok: true, topicId: id, hidden: topic.mcqsHidden, changed: changed.length });
+});
+
 router.delete("/topics/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const [row] = await db.update(topicsTable).set({ active: false, archived: true }).where(eq(topicsTable.id, id)).returning();
@@ -1100,6 +1130,11 @@ router.post("/mcqs/:id/publish", requireAdmin, async (req, res): Promise<void> =
   const id = Number(req.params.id);
   const [mcq] = await db.update(mcqsTable).set({ status: "published" }).where(eq(mcqsTable.id, id)).returning();
   if (!mcq) { res.status(404).json({ error: "MCQ not found" }); return; }
+  // Publishing into a topic whose MCQs are hidden keeps it hidden until the admin shows the topic.
+  if (mcq.topicId != null && mcq.pastPaperId == null && mcq.examId == null) {
+    const [t] = await db.select({ h: topicsTable.mcqsHidden }).from(topicsTable).where(eq(topicsTable.id, mcq.topicId));
+    if (t?.h) { await db.update(mcqsTable).set({ status: "hidden" }).where(eq(mcqsTable.id, mcq.id)); mcq.status = "hidden"; }
+  }
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "MCQ_PUBLISHED", entity: "mcq", entityId: mcq.id });
   res.json({ ...mcq, module: "", subject: "", topic: "" });
 });
@@ -1171,6 +1206,9 @@ router.patch("/admin/mcqs/publish-drafts", requireAdmin, async (req, res): Promi
     parsed.data.moduleId ? eq(mcqsTable.moduleId, parsed.data.moduleId) : undefined,
   )).returning({ id: mcqsTable.id });
   if (rows.length) {
+    // Anything that landed in a topic with hidden MCQs goes back to hidden.
+    const hiddenTopics = (await db.select({ id: topicsTable.id }).from(topicsTable).where(eq(topicsTable.mcqsHidden, true))).map((t) => t.id);
+    if (hiddenTopics.length) await db.update(mcqsTable).set({ status: "hidden" }).where(and(inArray(mcqsTable.id, rows.map((r) => r.id)), inArray(mcqsTable.topicId, hiddenTopics), isNull(mcqsTable.pastPaperId), isNull(mcqsTable.examId)));
     await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "MCQS_DRAFTS_PUBLISHED", entity: "mcq", entityId: parsed.data.moduleId ?? 0, metadata: JSON.stringify({ moduleId: parsed.data.moduleId ?? null, count: rows.length }) });
   }
   res.json({ ok: true, published: rows.length });

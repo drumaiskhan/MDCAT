@@ -1,9 +1,9 @@
 import { subjectTopicBody } from '../lib/mdcatCurriculum';
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { db, mcqImportProfilesTable, mcqsTable, examQuestionsTable, auditLogsTable } from "@workspace/db";
+import { db, mcqImportProfilesTable, mcqsTable, subjectsTable, topicsTable, examQuestionsTable, auditLogsTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth";
 import { extractFileContent } from "../lib/fileExtraction";
 import { extractMcqsFromText, extractMcqsFromRows, DEFAULT_IMPORT_PATTERNS, type ImportPatternSet } from "../lib/mcqParser";
@@ -151,6 +151,10 @@ const CommitBody = z.object({
     // had it silently dropped here. Optional + defaulted so old clients
     // that don't send it yet still work.
     difficulty: z.enum(["easy", "moderate", "hard"]).optional(),
+    // Per-question subject (past-paper import: one paper mixes several
+    // subjects, so each question can be filed under its own). Overrides the
+    // batch-level subjectId for this row.
+    subjectId: z.number().int().positive().nullable().optional(),
   })).min(1).max(2000),
 }).refine(
   (data) => !!data.pastPaperId || !!data.examId || (!!data.moduleId && !!data.subjectId && !!data.topicId),
@@ -215,8 +219,26 @@ router.post("/admin/mcq-import/commit", requireAdmin, subjectTopicBody, async (r
   const data = parsed.data;
 
   try {
+    // Per-question subject overrides: resolve each subject's storage module
+    // once so the question stays consistent in the curriculum tree. Unknown
+    // ids are ignored (the question falls back to the batch-level subject).
+    const overrideIds = Array.from(new Set(data.mcqs.map((m) => m.subjectId).filter((v): v is number => v != null)));
+    const moduleBySubject = new Map<number, number>();
+    if (overrideIds.length) {
+      const subs = await db.select({ id: subjectsTable.id, moduleId: subjectsTable.moduleId }).from(subjectsTable).where(inArray(subjectsTable.id, overrideIds));
+      for (const sub of subs) moduleBySubject.set(sub.id, sub.moduleId);
+    }
+    // A topic whose MCQs the admin has hidden keeps newly imported questions hidden too.
+    let topicHidden = false;
+    if (data.topicId && !data.pastPaperId && !data.examId && data.status === "published") {
+      const [t] = await db.select({ h: topicsTable.mcqsHidden }).from(topicsTable).where(eq(topicsTable.id, data.topicId));
+      topicHidden = !!t?.h;
+    }
     const rows = await db.insert(mcqsTable).values(
-      data.mcqs.map((mcq) => ({
+      data.mcqs.map((mcq) => {
+        const own = mcq.subjectId != null && moduleBySubject.has(mcq.subjectId) ? mcq.subjectId : null;
+        const sameAsBatch = own == null || own === data.subjectId;
+        return {
         question: mcq.question,
         options: mcq.options,
         correctAnswer: mcq.correctAnswer ?? null,
@@ -226,14 +248,15 @@ router.post("/admin/mcq-import/commit", requireAdmin, subjectTopicBody, async (r
         reference: mcq.reference ?? null,
         hint: mcq.hint ?? null,
         difficulty: mcq.difficulty ?? "moderate",
-        status: data.status,
+        status: topicHidden && sameAsBatch ? "hidden" : data.status,
         source: "import" as const,
-        moduleId: data.moduleId ?? null,
-        subjectId: data.subjectId ?? null,
-        topicId: data.topicId ?? null,
+        moduleId: (sameAsBatch ? data.moduleId : moduleBySubject.get(own!)) ?? null,
+        subjectId: (sameAsBatch ? data.subjectId : own) ?? null,
+        topicId: sameAsBatch ? (data.topicId ?? null) : null,
         pastPaperId: data.pastPaperId ?? null,
         examId: data.examId ?? null,
-      })),
+        };
+      }),
     ).returning({ id: mcqsTable.id });
 
     // Questions attached directly to an exam are automatically added to

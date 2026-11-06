@@ -170,3 +170,6 @@ ALTER TABLE med_exams ADD COLUMN IF NOT EXISTS course_year_ids INTEGER[] NOT NUL
 COMMIT;
 
 ALTER TABLE med_subjects ADD COLUMN IF NOT EXISTS course_year_id INTEGER;
+
+-- Per-topic "hide MCQs from students" switch
+ALTER TABLE med_topics ADD COLUMN IF NOT EXISTS mcqs_hidden BOOLEAN NOT NULL DEFAULT FALSE;

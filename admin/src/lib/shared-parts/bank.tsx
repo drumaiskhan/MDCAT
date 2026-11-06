@@ -332,8 +332,21 @@ export function AnalysisToggle({ rows, label, filters }: { rows: AdminMcqRow[]; 
 export function McqTreeTopic({ moduleId, subjectId, topicId, name, mcqsByTopic, selectedIds, onToggleSelect }: { moduleId: number; subjectId: number; topicId: number; name: string; mcqsByTopic: Map<number, AdminMcqRow[]>; selectedIds: Set<number>; onToggleSelect: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const rows = mcqsByTopic.get(topicId) ?? [];
-  return <div className="rounded-lg border border-border bg-background">
-    <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-2"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-tree-topic-${topicId}`}><ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />{name}</button><span className="text-[10px] font-normal text-muted-foreground">{rows.length} question{rows.length === 1 ? '' : 's'}</span><AnalysisToggle rows={rows} label={name} filters={{ topicId }} /><BulkDeleteInScope label={name} count={rows.length} filters={{ topicId }} /></div>
+  // Hide / Show for students: the topic's questions stay uploaded; hiding just keeps them
+  // out of student view until the admin shows them (e.g. once the lecture is done).
+  const visQ = useQuery({ queryKey: ['admin-topic-mcq-visibility'], queryFn: topicAdminApi.mcqVisibility, staleTime: 15_000 });
+  const vis = (visQ.data ?? []).find((v) => v.topicId === topicId);
+  const hidden = !!vis?.hidden;
+  const toggleVis = useMutation({
+    mutationFn: () => topicAdminApi.setMcqVisible(topicId, hidden),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-topic-mcq-visibility'] }); queryClient.invalidateQueries({ queryKey: ['admin-mcqs-tree'] }); queryClient.invalidateQueries({ queryKey: getListMcqsQueryKey() });
+      toast({ title: res.hidden ? 'MCQs hidden from students' : 'MCQs now visible to students', description: `${res.changed} question${res.changed === 1 ? '' : 's'} updated in “${name}”.` });
+    },
+    onError: (err: unknown) => toast({ title: 'Could not change visibility', description: err instanceof ApiRequestError ? err.message : 'Something went wrong — check your connection and try again.', variant: 'destructive' }),
+  });
+  return <div className={cn('rounded-lg border bg-background', hidden ? 'border-dashed border-amber-500/60' : 'border-border')}>
+    <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-2"><button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-2 text-left text-xs font-bold" data-testid={`button-tree-topic-${topicId}`}><ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />{name}</button><span className="text-[10px] font-normal text-muted-foreground">{rows.length} question{rows.length === 1 ? '' : 's'}</span>{hidden && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600" data-testid={`badge-topic-hidden-${topicId}`}>Hidden from students</span>}<button type="button" disabled={toggleVis.isPending || visQ.isLoading} onClick={() => toggleVis.mutate()} className={cn('inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold disabled:opacity-50', hidden ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:bg-muted')} data-testid={`button-toggle-topic-mcqs-${topicId}`}>{toggleVis.isPending ? <Loader2 size={11} className="animate-spin" /> : hidden ? <Eye size={11} /> : <EyeOff size={11} />}{hidden ? 'Show to students' : 'Hide from students'}</button><AnalysisToggle rows={rows} label={name} filters={{ topicId }} /><BulkDeleteInScope label={name} count={rows.length} filters={{ topicId }} /></div>
     {open && <div className="space-y-2 border-t border-border p-3">{rows.length ? rows.map((m) => <McqTreeRow key={m.id} mcq={m} selectedIds={selectedIds} onToggleSelect={onToggleSelect} />) : <p className="text-[11px] text-muted-foreground">No questions in this topic yet.</p>}</div>}
   </div>;
 }
@@ -609,61 +622,28 @@ export function McqSourceGroup({ label, icon: Icon, rows }: { label: string; ico
   </div>;
 }
 
-export function PastPaperEditForm({ paper, onSave, onCancel, saving, collegeOptions }: { paper: PastPaper; onSave: (body: Partial<PastPaper>) => void; onCancel: () => void; saving: boolean; collegeOptions: string[] }) {
-  const [initialDegree, initialStudyYear] = (paper.level || '').split(' - ').map((s) => s.trim());
-  const [formDegree, setFormDegree] = useState(DEGREE_OPTIONS.includes(initialDegree as typeof DEGREE_OPTIONS[number]) ? initialDegree : '');
-  const [formStudyYear, setFormStudyYear] = useState((DEGREE_YEAR_OPTIONS[initialDegree] || []).includes(initialStudyYear) ? initialStudyYear : '');
-  const [formProgramId, setFormProgramId] = useState(paper.programId ? String(paper.programId) : '');
+export function PastPaperEditForm({ paper, onSave, onCancel, saving }: { paper: PastPaper; onSave: (body: Partial<PastPaper>) => void; onCancel: () => void; saving: boolean; collegeOptions?: string[] }) {
+  // Name, Year and Course only. Degree stays MDCAT behind the scenes (the student
+  // visibility filter reads programTargetKind / yearTargetNumber / level). Existing
+  // college, program and academic-year values on the paper are left untouched.
+  const degree = 'MDCAT';
+  const studyYear = DEGREE_YEAR_OPTIONS[degree][0];
   const [formCourseYears, setFormCourseYears] = useState<number[]>(paper.courseYearIds ?? []);
-  const programsQ = useQuery({ queryKey: ['admin-programs-flat'], queryFn: () => academicApi.programs(undefined, true) });
-  const academicYearsQ = useQuery({ queryKey: ['admin-academic-years-flat', formProgramId], queryFn: () => academicApi.academicYears(formProgramId ? Number(formProgramId) : undefined, true) });
-  const composedLevel = [formDegree, formStudyYear].filter(Boolean).join(' - ');
 
   return <form onSubmit={(e) => {
     e.preventDefault();
-    if (!formDegree || !formStudyYear) { toast({ title: 'Degree and year required', description: 'Pick both so this paper only shows to the right students — leaving them blank makes it visible to every year.', variant: 'destructive' }); return; }
+    if (!formCourseYears.length) { toast({ title: 'Course required', description: 'Tick FSc-I, FSc-II or Full Course so this paper only shows to the right students.', variant: 'destructive' }); return; }
     const f = new FormData(e.currentTarget);
-    const programId = f.get('programId') ? Number(f.get('programId')) : null;
-    const academicYearId = f.get('academicYearId') ? Number(f.get('academicYearId')) : null;
     onSave({
-      title: String(f.get('title')), examBoard: String(f.get('examBoard') || ''), year: String(f.get('year') || ''),
-      level: composedLevel || String(f.get('level') || ''), programId, academicYearId,
-      programTargetKind: formDegree || null, yearTargetNumber: studyYearToNumber(formDegree, formStudyYear) ?? null, courseYearIds: formCourseYears,
+      title: String(f.get('title')), year: String(f.get('year') || ''),
+      level: `${degree} - ${studyYear}`, programTargetKind: degree, yearTargetNumber: studyYearToNumber(degree, studyYear) ?? null, courseYearIds: formCourseYears,
     });
-  }} className="grid gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4 sm:p-5 md:grid-cols-4">
-    <input required name="title" defaultValue={paper.title} placeholder="Paper title, e.g. Block A" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid={`input-edit-paper-title-${paper.id}`} />
-    <input name="examBoard" defaultValue={paper.examBoard} list={`edit-paper-college-options-${paper.id}`} placeholder="College, e.g. KMU" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid={`input-edit-paper-board-${paper.id}`} />
-    <datalist id={`edit-paper-college-options-${paper.id}`}>{collegeOptions.map((c) => <option key={c} value={c} />)}</datalist>
-    <input name="year" defaultValue={paper.year} placeholder="Year, e.g. 2024" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid={`input-edit-paper-year-${paper.id}`} />
-
-    <div className="rounded-xl border-2 border-primary/40 bg-card/70 p-3 md:col-span-4">
-      <p className="mb-2.5 text-[10px] font-extrabold uppercase tracking-[.08em] text-primary">Degree &amp; year (shown to students) — required</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1.5 block text-[11px] font-bold text-muted-foreground">Degree</span>
-          <select required value={formDegree} onChange={(e) => { setFormDegree(e.target.value); setFormStudyYear(''); }} className="h-11 w-full rounded-xl border border-border bg-card px-3 text-xs font-semibold outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid={`select-edit-paper-degree-${paper.id}`}>
-            <option value="">Select degree…</option>
-            {DEGREE_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-[11px] font-bold text-muted-foreground">Year</span>
-          <select required value={formStudyYear} onChange={(e) => setFormStudyYear(e.target.value)} disabled={!formDegree} className="h-11 w-full rounded-xl border border-border bg-card px-3 text-xs font-semibold outline-none transition-shadow focus:ring-2 focus:ring-primary/25 disabled:opacity-50" data-testid={`select-edit-paper-study-year-${paper.id}`}>
-            <option value="">{formDegree ? 'Select year…' : 'Pick a degree first'}</option>
-            {(DEGREE_YEAR_OPTIONS[formDegree] || []).map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </label>
-      </div>
-      <p className="mt-2 text-[11px] font-semibold text-accent-text">Both are required — leaving either blank makes this paper visible to every year, which is the bug this fixes.</p>
-      <CourseYearPicker value={formCourseYears} onChange={setFormCourseYears} testIdPrefix={`edit-paper-course-year-${paper.id}`} className="mt-3" />
-    </div>
-
-    <select name="programId" value={formProgramId} onChange={(e) => setFormProgramId(e.target.value)} className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid={`select-edit-paper-program-${paper.id}`}><option value="">All programs (advanced targeting, optional)</option>{(programsQ.data || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-    <select name="academicYearId" defaultValue={paper.academicYearId ?? ''} disabled={!formProgramId} className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 disabled:opacity-50 md:col-span-2" data-testid={`select-edit-paper-academic-year-${paper.id}`}><option value="">All years</option>{(academicYearsQ.data || []).map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select>
-    <input name="level" value={composedLevel} onChange={() => {}} placeholder="Level label (auto-filled from Degree + Year above)" className="h-11 rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25 md:col-span-2" data-testid={`input-edit-paper-level-${paper.id}`} readOnly />
-
-    <div className="flex flex-col gap-2 sm:flex-row md:col-span-2">
-      <button disabled={saving} className="btn-pop flex-1 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm sm:flex-none disabled:opacity-50" data-testid={`button-save-edit-paper-${paper.id}`}>{saving ? <span className="inline-flex items-center gap-2"><BrandSpinner size={13} /> Saving…</span> : 'Save changes'}</button>
+  }} className="grid gap-4 rounded-2xl border border-primary/30 bg-primary/10 p-4 sm:p-5 md:grid-cols-3">
+    <label className="block md:col-span-2"><span className="mb-1.5 block text-[11px] font-bold text-muted-foreground">Name</span><input required name="title" defaultValue={paper.title} placeholder="e.g. Block A" className="h-11 w-full rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid={`input-edit-paper-title-${paper.id}`} /></label>
+    <label className="block"><span className="mb-1.5 block text-[11px] font-bold text-muted-foreground">Year</span><input name="year" inputMode="numeric" defaultValue={paper.year} placeholder="e.g. 2026" className="h-11 w-full rounded-xl border border-border bg-card px-3 text-xs outline-none transition-shadow focus:ring-2 focus:ring-primary/25" data-testid={`input-edit-paper-year-${paper.id}`} /></label>
+    <div className="md:col-span-3"><CourseYearPicker label="Course" requiredHint value={formCourseYears} onChange={setFormCourseYears} testIdPrefix={`edit-paper-course-year-${paper.id}`} /></div>
+    <div className="flex flex-col gap-2 sm:flex-row md:col-span-3">
+      <button disabled={saving} className="btn-pop flex-1 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm sm:flex-none" data-testid={`button-save-edit-paper-${paper.id}`}>{saving ? 'Saving…' : 'Save changes'}</button>
       <button type="button" onClick={onCancel} className="btn-pop flex-1 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold hover:bg-muted sm:flex-none" data-testid={`button-cancel-edit-paper-${paper.id}`}>Cancel</button>
     </div>
   </form>;
@@ -725,7 +705,18 @@ export function PastPaperUploader({ pastPaperId, onImported }: { pastPaperId: nu
   const parseFile = async () => {
     if (!file) return;
     setParsing(true); setParseError(null);
-    try { setCandidates((await mcqImportApi.parse(file)).candidates); }
+    try {
+      const found = (await mcqImportApi.parse(file)).candidates;
+      // Pre-fill each question's subject when the file's own subject label
+      // matches exactly ONE subject name (ambiguous names are left for the admin).
+      const allSubjects = subjectsQ.data ?? [];
+      setCandidates(found.map((c) => {
+        const want = c.suggestedPath?.subject?.trim().toLowerCase();
+        if (!want || c.subjectId) return c;
+        const hits = allSubjects.filter((sub) => sub.name.trim().toLowerCase() === want);
+        return hits.length === 1 ? { ...c, subjectId: hits[0].id } : c;
+      }));
+    }
     catch (err) { setParseError(err instanceof ApiRequestError ? err.message : 'Could not parse this file.'); }
     finally { setParsing(false); }
   };
@@ -744,6 +735,7 @@ export function PastPaperUploader({ pastPaperId, onImported }: { pastPaperId: nu
     <div className="mt-2 flex flex-wrap items-center gap-2"><input type="file" accept=".txt,.csv,.xlsx,.xls,.pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="flex-1 rounded-lg border border-dashed border-border bg-background px-2 py-2 text-xs" data-testid={`input-paper-file-${pastPaperId}`} /><button disabled={!file || parsing} onClick={parseFile} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid={`button-parse-paper-${pastPaperId}`}>{parsing ? 'Reading…' : 'Parse file'}</button></div>
     {parseError && <p className="mt-2 text-[11px] font-semibold text-destructive">{parseError}</p>}
     {candidates.length > 0 && <div className="mt-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 p-2.5 text-xs"><span className="font-bold text-muted-foreground">Subject for all questions:</span><select value="" onChange={(e) => { const v = e.target.value; if (v) setCandidates((prev) => prev.map((c) => ({ ...c, subjectId: v === 'none' ? null : Number(v) }))); }} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-paper-subject-all-${pastPaperId}`}><option value="">Choose to apply to every question…</option><option value="none">Clear all subjects</option>{(subjectsQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><span className="w-full text-[11px] text-muted-foreground">{candidates.filter((c) => c.subjectId).length} of {candidates.length} tagged · students can attempt this paper subject by subject.</span></div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold"><span>{candidates.length} questions found · {candidates.filter((c) => c.needsReview).length} need review</span><button disabled={commit.isPending} onClick={importAll} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-extrabold text-primary-foreground disabled:opacity-50" data-testid={`button-import-paper-${pastPaperId}`}>{commit.isPending ? 'Importing…' : `Import ${candidates.length} questions`}</button></div>
       <div className="max-h-96 space-y-2 overflow-y-auto pr-1">{candidates.map((c, i) => <div key={i} className={cn('rounded-xl border bg-card p-3', c.needsReview ? 'border-accent' : 'border-border')} data-testid={`card-paper-candidate-${i}`}>
         <div className="flex items-center justify-between"><span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', c.needsReview ? 'bg-accent/20 text-accent-text' : 'bg-primary/15 text-primary')}>{c.needsReview ? 'Needs review' : 'Looks good'}</span><button onClick={() => removeCandidate(i)} className="text-[11px] font-bold text-destructive" data-testid={`button-remove-paper-candidate-${i}`}>Remove</button></div>
@@ -751,6 +743,7 @@ export function PastPaperUploader({ pastPaperId, onImported }: { pastPaperId: nu
         <SuggestedPathHint path={c.suggestedPath} />
         <div className="mt-2 grid gap-2 sm:grid-cols-2">{[0, 1, 2, 3, 4].map((oi) => <input key={oi} value={c.options[oi] || ''} onChange={(e) => { const opts = [...c.options]; opts[oi] = e.target.value; updateCandidate(i, { options: opts }); }} placeholder={`Option ${String.fromCharCode(65 + oi)}${oi === 4 ? ' (optional)' : ''}`} className="h-8 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`input-paper-candidate-option-${i}-${oi}`} />)}</div>
         <div className="mt-2 flex items-center gap-2"><span className="text-[11px] font-bold text-muted-foreground">Correct:</span><select value={c.correctAnswer ?? ''} onChange={(e) => updateCandidate(i, { correctAnswer: e.target.value || null })} className="h-8 flex-1 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-paper-candidate-answer-${i}`}><option value="">Not set</option>{c.options.map((opt, oi) => opt && <option key={oi} value={opt}>{String.fromCharCode(65 + oi)}. {opt.slice(0, 40)}</option>)}</select></div>
+        <div className="mt-2 flex items-center gap-2"><span className="text-[11px] font-bold text-muted-foreground">Subject:</span><select value={c.subjectId ?? ''} onChange={(e) => updateCandidate(i, { subjectId: e.target.value ? Number(e.target.value) : null })} className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 text-xs" data-testid={`select-paper-candidate-subject-${i}`}><option value="">{subjectId ? 'Same as the default above' : 'No subject (General)'}</option>{(subjectsQ.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
         <div className="mt-2 flex items-center gap-2"><span className="text-[11px] font-bold text-muted-foreground">Difficulty:</span><DifficultyPicker value={c.difficulty} onChange={(v) => updateCandidate(i, { difficulty: v })} testId={`button-paper-candidate-difficulty-${i}`} /></div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <input value={c.hint ?? ''} onChange={(e) => updateCandidate(i, { hint: e.target.value || null })} placeholder="Hint (optional — shown while attempting)" className="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs" data-testid={`input-paper-candidate-hint-${i}`} />

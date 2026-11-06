@@ -838,3 +838,6 @@ CREATE INDEX IF NOT EXISTS med_user_sessions_user_idx
   ON med_user_sessions (user_id);
 
 COMMIT;
+
+-- Per-topic "hide MCQs from students" switch
+ALTER TABLE med_topics ADD COLUMN IF NOT EXISTS mcqs_hidden BOOLEAN NOT NULL DEFAULT FALSE;

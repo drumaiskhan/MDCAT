@@ -21,6 +21,8 @@ import './dash3d.css'; // dashboard depth layer (2.5D: gradients, edges, paralla
 import './dark-modern.css'; // v66: modern dark theme (ink-indigo surfaces, glow, tuned status colours)
 import './studio.css';
 import './sidebar.css'; // sidebar remake (collapsible groups, tinted tiles, find box)
+import './refine.css'; // v67: unified radii, elevation, type scale, touch targets
+import './leaderboard.css'; // v67: leaderboard v2 (flat standing card, podium, list)
 import './perf.css'; // must stay last: overrides the heavy effects on phones
 import { initFx } from '@/lib/fx';
 import { initThemePref } from '@/lib/theme';

@@ -25,19 +25,19 @@ export function useStudyYears() {
   return { years: years.filter((y) => !isBundleYearName(y.name)), ...rest };
 }
 
-export function CourseYearPicker({ value, onChange, testIdPrefix = 'course-year', className }: { value: number[]; onChange: (ids: number[]) => void; testIdPrefix?: string; className?: string }) {
+export function CourseYearPicker({ value, onChange, testIdPrefix = 'course-year', className, label = 'FSc year', requiredHint = false }: { value: number[]; onChange: (ids: number[]) => void; testIdPrefix?: string; className?: string; label?: string; requiredHint?: boolean }) {
   const { years, isLoading } = useCourseYears();
   const shown = years.filter((c) => c.active || value.includes(c.id));
   const toggle = (id: number) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
   return <div className={cn('text-xs', className)} data-testid={`field-${testIdPrefix}`}>
-    <div className="mb-1 text-xs font-bold">FSc year</div>
+    <div className="mb-1.5 block text-[11px] font-bold text-muted-foreground">{label}</div>
     <div className="flex flex-wrap gap-2">
       {shown.map((c) => <label key={c.id} className={cn('inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold', value.includes(c.id) ? 'border-primary bg-primary/15' : 'border-border bg-card')}>
         <input type="checkbox" checked={value.includes(c.id)} onChange={() => toggle(c.id)} data-testid={`checkbox-${testIdPrefix}-${c.id}`} />{c.name}
       </label>)}
       {!isLoading && !shown.length && <span className="text-[11px] text-muted-foreground">No FSc years yet — add them on the Membership plans page.</span>}
     </div>
-    <p className="mt-1 text-[10px] text-muted-foreground">{value.length ? 'Only students registered under the ticked FSc year(s) will see this.' : 'Nothing ticked = shown to every FSc year.'}</p>
+    <p className="mt-1 text-[10px] text-muted-foreground">{value.length ? 'Only students registered under the ticked FSc year(s) will see this.' : requiredHint ? 'Tick at least one year.' : 'Nothing ticked = shown to every FSc year.'}</p>
   </div>;
 }
 
