@@ -11,7 +11,7 @@ export async function ensureMdcatSchema() {
  `CREATE TABLE IF NOT EXISTS mdcat_note_state (user_id integer NOT NULL REFERENCES med_users(id) ON DELETE CASCADE, note_id integer NOT NULL REFERENCES mdcat_notes(id) ON DELETE CASCADE, state jsonb NOT NULL DEFAULT '{}', updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,note_id))`,
  `CREATE TABLE IF NOT EXISTS mdcat_book_marks (id uuid PRIMARY KEY, user_id integer NOT NULL REFERENCES med_users(id) ON DELETE CASCADE, book_id integer NOT NULL REFERENCES med_books(id) ON DELETE CASCADE, file_key text NOT NULL, page integer NOT NULL CHECK(page>0), kind text NOT NULL, data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`,
  `CREATE INDEX IF NOT EXISTS mdcat_book_marks_owner ON mdcat_book_marks(user_id,book_id,file_key)`,
- `CREATE TABLE IF NOT EXISTS mdcat_book_progress (user_id integer NOT NULL REFERENCES med_users(id) ON DELETE CASCADE, book_id integer NOT NULL REFERENCES med_books(id) ON DELETE CASCADE, file_key text NOT NULL, page integer NOT NULL DEFAULT 1, updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,book_id,file_key))`
+ `CREATE TABLE IF NOT EXISTS mdcat_book_progress (user_id integer NOT NULL REFERENCES med_users(id) ON DELETE CASCADE, book_id integer NOT NULL REFERENCES med_books(id) ON DELETE CASCADE, file_key text NOT NULL, page integer NOT NULL DEFAULT 1, updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,book_id,file_key))`,
  `ALTER TABLE mdcat_lectures ADD COLUMN IF NOT EXISTS chapter_id integer REFERENCES med_chapters(id) ON DELETE SET NULL`,
  `ALTER TABLE mdcat_lectures ADD COLUMN IF NOT EXISTS course_year_ids integer[] NOT NULL DEFAULT '{}'`,
  ];

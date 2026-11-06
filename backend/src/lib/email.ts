@@ -132,6 +132,8 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   }
 
   logger.info({ to, subject }, "[email:dev-mode] No email provider configured — logging email instead of sending");
+  // Never print the message body in production: it contains reset/verification links and codes.
+  if (process.env.NODE_ENV === "production") return;
   // eslint-disable-next-line no-console
   console.log(`\n----- DEV EMAIL -----\nTo: ${to}\nSubject: ${subject}\n${html}\n----------------------\n`);
 }

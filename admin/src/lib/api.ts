@@ -495,6 +495,9 @@ export const membershipPlansAdminApi = {
   removePermanent: (id: number) => request<{ ok: true }>(`/membership-plans/${id}/permanent`, { method: 'DELETE' }),
 };
 
+/** `source` value the backend stamps on MCQs filed by the student AI MCQ Maker (see studentQbankContribution.ts). */
+export const STUDENT_AI_SOURCE = 'student_ai';
+
 export interface AdminMcqRow {
   id: number; question: string; options: string[]; correctAnswer: string | null; explanation: string | null; optionExplanations: (string | null)[] | null;
   explanationStatus: ExplanationStatus; reference: string | null; difficulty: string; tags: string[]; imagePath: string | null;

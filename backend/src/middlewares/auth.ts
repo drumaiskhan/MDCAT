@@ -44,6 +44,7 @@ function extractToken(req: Request): string | null {
 // Safe to remove once the auth flow is confirmed working — it logs no
 // secrets, only which branch of the check was hit.
 function debugAuth(req: Request, reason: string, extra?: Record<string, unknown>): void {
+  if (process.env.AUTH_DEBUG !== "1") return; // opt-in: set AUTH_DEBUG=1 to re-enable
   // eslint-disable-next-line no-console
   console.log("[auth-debug]", req.method, req.originalUrl, "-", reason, extra ?? "");
 }
