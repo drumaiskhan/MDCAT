@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - run: npm install --no-audit --no-fund
-      - run: mkdir -p dist && echo '<!doctype html><title>MDCAT</title>' > dist/index.html
+      - run: mkdir -p dist android/app/src/main/assets && echo '<!doctype html><title>MDCAT</title>' > dist/index.html
       - run: npx cap sync android
         env:
           SITE_URL: ${{ inputs.site_url }}
