@@ -1,29 +1,74 @@
+
 name: Build Student APK
+
 on:
   workflow_dispatch:
     inputs:
       site_url:
         description: Live student website URL
+        required: true
         default: https://mdcatprep.live
+        type: string
+
+permissions:
+  contents: read
+
 jobs:
   apk:
+    name: Build MDCAT Student APK
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: student
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 21 }
-      - run: npm install --no-audit --no-fund
-      - run: mkdir -p dist && echo '<!doctype html><title>MDCAT</title>' > dist/index.html
-      - run: npx cap sync android
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: student/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build student frontend
+        run: npm run build
         env:
           SITE_URL: ${{ inputs.site_url }}
-      - run: chmod +x android/gradlew && cd android && ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
+
+      - name: Verify frontend build
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: Frontend build did not generate dist/index.html"
+            exit 1
+          fi
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+        env:
+          SITE_URL: ${{ inputs.site_url }}
+
+      - name: Build Debug APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: mdcat-student-apk
           path: student/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
