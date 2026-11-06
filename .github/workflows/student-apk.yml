@@ -75,7 +75,7 @@ jobs:
       - name: Install Android SDK 36
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Sync Capacitor Android
         run: npx cap sync android
