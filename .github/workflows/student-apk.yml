@@ -75,6 +75,8 @@ jobs:
           packages: 'platform-tools'
         with:
           packages: 'platform-tools'
+        with:
+          packages: 'platform-tools'
 
       - name: Install Android SDK 36
         run: |
