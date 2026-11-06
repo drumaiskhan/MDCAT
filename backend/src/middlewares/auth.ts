@@ -60,7 +60,12 @@ export async function attachUser(req: Request, _res: Response, next: NextFunctio
     return next();
   }
 
-  const payload = verifySession(token);
+  let payload = verifySession(token);
+  // A stale/invalid cookie (e.g. left in an app WebView) must not shadow a valid bearer token.
+  if (!payload && cookieToken) {
+    const bearer = req.headers.authorization;
+    if (bearer?.startsWith("Bearer ")) payload = verifySession(bearer.slice("Bearer ".length));
+  }
   if (!payload) {
     debugAuth(req, "token failed JWT verification (bad signature or expired)", { tokenSource: cookieToken ? "cookie" : "bearer" });
     return next();

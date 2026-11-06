@@ -1,4 +1,4 @@
-import {authHeaders} from '../lib/client';
+import {authHeaders,authCredentials} from '../lib/client';
 import { apiBase } from '../lib/client';
 
 // Private note images are served by the API only to students who may read the subject.
@@ -34,7 +34,7 @@ export async function loadNoteImage(stored: string): Promise<string> {
         /* cache unavailable: fall through to the network */
       }
       if (!blob) {
-        const res = await fetch(url, { headers:authHeaders(), credentials: 'include' });
+        const res = await fetch(url, { headers:authHeaders(), credentials: authCredentials() });
         if (!res.ok) throw new Error('Image unavailable (' + res.status + ')');
         const copy = res.clone();
         blob = await res.blob();

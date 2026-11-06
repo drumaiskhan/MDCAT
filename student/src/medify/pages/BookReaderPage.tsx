@@ -1,4 +1,4 @@
-import {authHeaders} from '../lib/client';
+import {authHeaders,authCredentials} from '../lib/client';
 import {
   useEffect,
   useLayoutEffect,
@@ -264,7 +264,7 @@ export function BookReaderPage() {
       if (hydrated.current && user)
         fetch(`${apiBase()}/books/${id}/progress`, {
           method: "POST",
-          credentials: "include",
+          credentials: authCredentials(),
           keepalive: true,
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ page: position.current }),

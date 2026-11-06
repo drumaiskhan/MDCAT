@@ -1,3 +1,10 @@
+# Fix: "Please sign in to continue" in the Android app (Lectures and others)
+
+- `student/src/lib/mdcat-api.ts` (`learningApi`, used by Lectures, Chapters, Course years, Flashcard progress) now sends the native bearer token and omits cookies inside the Capacitor app, like `lib/api.ts`. Previously it sent only a cookie, which the WebView doesn't carry cross-origin, so every call returned 401.
+- Study Library (`medify/lib/client.ts`, note images, book-reader progress) now omits cookies in the native app so a stale cookie can't shadow the bearer token.
+- `student/src/lib/api.ts`: web branch no longer lets caller-supplied `options.headers` replace the merged headers (it dropped `Content-Type`).
+- `backend/src/middlewares/auth.ts`: if the session cookie is invalid/expired but a valid `Authorization: Bearer` token is present, the bearer token is used instead of treating the request as signed out.
+
 # FSc years by plan: separate FSc-I / FSc-II content, one storage module per year
 
 - **Plan-based year access** (`backend/src/lib/courseYearAccess.ts`): the FSc years a student can study come from the purchased, unexpired plan(s) they hold. An FSc-I plan unlocks FSc-I, an FSc-II plan FSc-II, and a "Full Course" plan (any course year named full / both / combined / complete / whole, or a plan that ticks both years) unlocks both. A plan with no years is open to every year. A newer purchase no longer hides an older paid one (FSc-I then FSc-II = both); admin-assigned plan changes still replace the old plan. Students with no purchased plan (trial/expired) fall back to the year picked at signup; students with none on file stay unrestricted, as before.
