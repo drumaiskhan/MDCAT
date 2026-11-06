@@ -1,4 +1,3 @@
-
 name: Build Student APK
 
 on:
@@ -13,10 +12,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: student-apk-build
+  cancel-in-progress: false
+
 jobs:
   apk:
     name: Build MDCAT Student APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     defaults:
       run:
@@ -30,8 +34,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: student/package-lock.json
+
+      - name: Setup npm
+        run: npm install --global npm@10.9.4
+
+      - name: Verify Node and npm
+        run: |
+          node --version
+          npm --version
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -42,6 +52,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Verify Capacitor versions
+        run: |
+          npx cap --version
+          npm ls @capacitor/core @capacitor/android @capacitor/cli
+
       - name: Build student frontend
         run: npm run build
         env:
@@ -50,30 +65,46 @@ jobs:
       - name: Verify frontend build
         run: |
           if [ ! -f dist/index.html ]; then
-            echo "ERROR: Frontend build did not generate dist/index.html"
+            echo "ERROR: dist/index.html was not generated."
             exit 1
           fi
 
       - name: Setup Android SDK
-
         uses: android-actions/setup-android@v3
 
-
       - name: Install Android SDK 36
-
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
 
       - name: Sync Capacitor Android
         run: npx cap sync android
         env:
           SITE_URL: ${{ inputs.site_url }}
 
+      - name: Verify generated Capacitor Android references
+        run: |
+          grep -n "capacitor-android" android/capacitor.settings.gradle
+          grep -n "capacitor-android@8" android/capacitor.settings.gradle
+          if grep -q "capacitor-android@7" android/capacitor.settings.gradle; then
+            echo "ERROR: Stale Capacitor 7 Android reference found."
+            exit 1
+          fi
+
       - name: Build Debug APK
         run: |
           chmod +x android/gradlew
           cd android
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Verify APK
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
