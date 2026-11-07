@@ -5,7 +5,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // the full explanation of these settings — this file mirrors it.
 const config: CapacitorConfig = {
   appId: 'com.mdcatproffs.admin',
-  appName: 'MDCAT Proffs Admin',
+  appName: 'MDCATprep Admin',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

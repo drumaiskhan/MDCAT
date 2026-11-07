@@ -48,7 +48,7 @@ function AdminSiteContent() {
       <Panel icon={Search} title="Search & social (SEO)" description="Homepage title, Google listing, and link previews.">
         <div className="space-y-4">
           <Field label="Page title" hint="Shown as the browser tab title and as the blue link in Google. Leave blank to keep the site's built-in default.">
-            <TextInput value={values.SEO_TITLE || ''} onChange={(e) => set('SEO_TITLE', e.target.value)} placeholder="MDCAT — MCQ Bank & Exam Prep for MDCAT Students" data-testid="input-seo-title" />
+            <TextInput value={values.SEO_TITLE || ''} onChange={(e) => set('SEO_TITLE', e.target.value)} placeholder="MDCATprep — MCQ Bank & Exam Prep for MDCAT Students" data-testid="input-seo-title" />
           </Field>
           <Field label="Meta description" hint="The snippet under the title in Google and on WhatsApp/Facebook/Twitter previews. One or two sentences (about 150–160 characters) shows best.">
             <TextArea value={values.SEO_DESCRIPTION || ''} onChange={(e) => set('SEO_DESCRIPTION', e.target.value)} maxLength={300} data-testid="input-seo-description" />

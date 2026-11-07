@@ -19,7 +19,7 @@ export function shareableVerdict(c: ChallengeSummary): 'win' | 'tie' | null {
 
 export function ChallengeShareDialog({ challenge, onClose }: { challenge: ChallengeSummary | null; onClose: () => void }) {
   const site = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get, staleTime: 5 * 60_000 });
-  const platformName = site.data?.PLATFORM_NAME || 'MDCAT';
+  const platformName = site.data?.PLATFORM_NAME || 'MDCATprep';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showName, setShowName] = useState(false);
   const [busy, setBusy] = useState(false);

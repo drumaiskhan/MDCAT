@@ -429,6 +429,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .admin-shell .card-lift:hover, .admin-shell aside :is(a, button):hover { transform: none; }
 }
 
-/* MDCAT Proffs: Indigo light and dark defaults. Admin branding remains editable. */
+/* MDCATprep: Indigo light and dark defaults. Admin branding remains editable. */
 :root { --primary: 245 58% 51%; --primary-foreground: 0 0% 100%; --ring: 245 58% 51%; --background: 240 100% 98%; --card: 0 0% 100%; --sidebar: 244 47% 20%; --sidebar-primary: 234 89% 74%; --sidebar-primary-foreground: 244 47% 14%; --sidebar-accent: 244 40% 28%; --sidebar-ring: 234 89% 74%; --accent: 234 89% 90%; --accent-foreground: 244 47% 20%; }
 .dark { --primary: 234 89% 74%; --primary-foreground: 244 47% 14%; --ring: 234 89% 74%; --background: 244 35% 9%; --card: 244 30% 13%; --sidebar: 244 40% 7%; --sidebar-primary: 234 89% 74%; --sidebar-accent: 244 30% 18%; }

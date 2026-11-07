@@ -64,7 +64,7 @@ import { authApi, academicApi, settingsApi, uploadFile, resolveUploadUrl, ApiReq
 
 export const cn = (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' ');
 
-export const initials = (name = 'MDCAT') => name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+export const initials = (name = 'MDCATprep') => name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
 
 export const money = (amount: number, currency = 'PKR') => new Intl.NumberFormat('en-PK', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
 

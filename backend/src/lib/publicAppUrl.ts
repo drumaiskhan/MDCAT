@@ -11,7 +11,7 @@
 //
 // which the browser tries to resolve as one hostname and fails with
 // DNS_PROBE_FINISHED_NXDOMAIN. This is exactly what shipped in the
-// "Reset your MDCAT Proffs password" email.
+// "Reset your MDCATprep password" email.
 //
 // Fix: emails need exactly one canonical URL, not a CORS allow-list. Prefer
 // an explicit PUBLIC_APP_URL when set (recommended for any deploy with more

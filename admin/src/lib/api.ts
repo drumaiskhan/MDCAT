@@ -932,7 +932,7 @@ export const fullBackupApi = {
 };
 
 // The MySQL-target restore option (routes/full-backup-mysql.ts on the
-// backend) has been removed — MDCAT Proffs is PostgreSQL/Supabase-only,
+// backend) has been removed — MDCATprep is PostgreSQL/Supabase-only,
 // and that route's mysql2 dependency was causing the API server to crash on
 // startup (mysql2 was only ever a dependency of the standalone
 // scripts/mysql-restore CLI tool, never of api-server itself). See

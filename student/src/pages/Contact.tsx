@@ -14,7 +14,7 @@ import { Footer, AnimatedBrandMark, SocialIcons, useDocumentHead } from '@/lib/s
 export default function Contact() {
   const siteQ = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
   const c = siteQ.data;
-  const platformName = c?.PLATFORM_NAME || 'MDCAT';
+  const platformName = c?.PLATFORM_NAME || 'MDCATprep';
 
   useDocumentHead({
     title: `Contact ${platformName}`,

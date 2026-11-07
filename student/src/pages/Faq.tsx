@@ -28,7 +28,7 @@ const FAQS = [
 
 export default function Faq() {
   const siteQ = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
-  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCAT';
+  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCATprep';
 
   useDocumentHead({
     title: `FAQs — ${platformName}`,

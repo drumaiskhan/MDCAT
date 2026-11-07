@@ -465,7 +465,7 @@ function AdminSettings() {
             </div>
             <div className={cn(inputRow, 'mt-5')}>
               <Field label={'"From" email'}><TextInput value={values.MAIL_FROM || ''} onChange={(e) => set('MAIL_FROM', e.target.value)} placeholder="no-reply@yourdomain.com" data-testid="input-mail-from" /></Field>
-              <Field label={'"From" name'}><TextInput value={values.MAIL_FROM_NAME || ''} onChange={(e) => set('MAIL_FROM_NAME', e.target.value)} placeholder="MDCAT" data-testid="input-mail-from-name" /></Field>
+              <Field label={'"From" name'}><TextInput value={values.MAIL_FROM_NAME || ''} onChange={(e) => set('MAIL_FROM_NAME', e.target.value)} placeholder="MDCATprep" data-testid="input-mail-from-name" /></Field>
             </div>
           </Panel>
 

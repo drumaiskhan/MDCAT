@@ -702,6 +702,8 @@ ALTER TABLE med_mcqs ALTER COLUMN module_id DROP NOT NULL;
 ALTER TABLE med_mcqs ALTER COLUMN subject_id DROP NOT NULL;
 ALTER TABLE med_mcqs ALTER COLUMN topic_id DROP NOT NULL;
 ALTER TABLE med_mcqs ADD COLUMN IF NOT EXISTS option_explanations TEXT[];
+ALTER TABLE med_mcqs ADD COLUMN IF NOT EXISTS paper_subject TEXT;
+ALTER TABLE med_mcqs ADD COLUMN IF NOT EXISTS paper_subject_ver INTEGER;
 ALTER TABLE med_mcqs ADD COLUMN IF NOT EXISTS explanation_status TEXT NOT NULL DEFAULT 'PENDING';
 -- Round 3, item 4b: short student-facing hint field (see ensureSchema.ts).
 ALTER TABLE med_mcqs ADD COLUMN IF NOT EXISTS hint TEXT;

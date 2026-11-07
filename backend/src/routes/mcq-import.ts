@@ -11,6 +11,7 @@ import { dbErrorMessage } from "../lib/dbErrors";
 import { getSetting } from "../lib/settings";
 import { generateExplanation, generateHint, classifyDifficulty } from "../lib/aiExplain";
 import { logger } from "../lib/logger";
+import { classifyPaperInBackground } from "../lib/paperTopics";
 
 const router: IRouter = Router();
 
@@ -258,6 +259,9 @@ router.post("/admin/mcq-import/commit", requireAdmin, subjectTopicBody, async (r
         };
       }),
     ).returning({ id: mcqsTable.id });
+
+    // Questions imported into a past paper are sorted into subjects by the AI in the background (never blocks the import).
+    if (data.pastPaperId && rows.length) classifyPaperInBackground(data.pastPaperId);
 
     // Questions attached directly to an exam are automatically added to
     // that exam's paper too — no need for the admin to separately paste

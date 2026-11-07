@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db, pastPapersTable, mcqsTable, auditLogsTable, usersTable } from "@workspace/db";
+import { db, pastPapersTable, mcqsTable, subjectsTable, auditLogsTable, usersTable } from "@workspace/db";
 import { requireAdmin, requireAuth, requireMembershipFor, isAdminRole } from "../middlewares/auth";
 import { deleteMcqsEverywhere } from "../lib/mcqCascade";
 import { getStudentTargeting, isTargetVisible, notifyTargetedStudents, type StudentTargeting } from "../lib/contentVisibility";
+import { CLASSIFY_VERSION, classifyPaperInBackground, isClassifying } from "../lib/paperTopics";
 
 const router: IRouter = Router();
 
@@ -71,6 +72,48 @@ router.get("/past-papers", async (req, res): Promise<void> => {
   )).orderBy(pastPapersTable.displayOrder);
   const scoped = isAdmin || !req.user ? rows : rows.filter((row) => isTargetVisible(row.programTargetKind, row.yearTargetNumber, targeting, row.courseYearIds));
   res.json(await paperViews(scoped));
+});
+
+// Subject-wise breakdown of one paper (published questions only) — feeds the paper's own page
+// ("Comprehensive Assessment (All Subjects)" plus one card per subject). A question's subject is,
+// in order: the subject an admin tagged it with (mcqs.subjectId), else the label the AI gave it
+// (mcqs.paperSubject), else a single "General" bucket. Same-named subjects merge. Each bucket
+// lists its mcq ids so the practice screen can attempt just those questions. Questions still
+// waiting for a label are sorted by the AI in the background (existing papers sort themselves the
+// first time anyone opens them); `classifying` tells the client to re-fetch shortly.
+router.get("/past-papers/:id/subjects", requireAuth, requireMembershipFor("past_papers"), async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid past paper id" }); return; }
+  const rows = await db
+    .select({ id: mcqsTable.id, subjectId: mcqsTable.subjectId, paperSubject: mcqsTable.paperSubject, paperSubjectVer: mcqsTable.paperSubjectVer, sortOrder: mcqsTable.sortOrder })
+    .from(mcqsTable)
+    .where(and(eq(mcqsTable.pastPaperId, id), eq(mcqsTable.status, "published")))
+    .orderBy(sql`${mcqsTable.sortOrder} ASC NULLS LAST`, mcqsTable.id);
+  const subjectIds = Array.from(new Set(rows.map((r) => r.subjectId).filter((v): v is number => v != null)));
+  const nameById = new Map<number, string>();
+  if (subjectIds.length) {
+    const subs = await db.select({ id: subjectsTable.id, name: subjectsTable.name }).from(subjectsTable).where(inArray(subjectsTable.id, subjectIds));
+    for (const s of subs) nameById.set(s.id, s.name.trim());
+  }
+  const GENERAL = "__general";
+  const buckets = new Map<string, { key: string; name: string; mcqIds: number[] }>();
+  let pending = 0;
+  for (const r of rows) {
+    const tagged = r.subjectId != null ? nameById.get(r.subjectId) : undefined;
+    const ai = r.paperSubject?.trim();
+    const name = tagged || (ai && ai.toLowerCase() !== "general" ? ai : undefined);
+    if (!tagged && (!ai || r.paperSubjectVer !== CLASSIFY_VERSION)) pending++;
+    const key = name ? name.toLowerCase() : GENERAL;
+    let b = buckets.get(key);
+    if (!b) { b = { key, name: name ?? "General", mcqIds: [] }; buckets.set(key, b); }
+    b.mcqIds.push(r.id);
+  }
+  if (pending > 0) classifyPaperInBackground(id);
+  const subjects = Array.from(buckets.values())
+    .map((b) => ({ ...b, count: b.mcqIds.length }))
+    // "General" always last; otherwise biggest subject first, then A–Z.
+    .sort((a, b) => (a.key === GENERAL ? 1 : 0) - (b.key === GENERAL ? 1 : 0) || b.count - a.count || a.name.localeCompare(b.name));
+  res.json({ total: rows.length, subjects, pending, classifying: pending > 0 && isClassifying(id) });
 });
 
 router.get("/past-papers/:id/mcqs", requireAuth, requireMembershipFor("past_papers"), async (req, res): Promise<void> => {

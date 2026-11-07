@@ -221,7 +221,7 @@ export class RemotePgClient {
 }
 
 /**
- * pg.Pool-compatible facade used by MDCAT Proffs.
+ * pg.Pool-compatible facade used by MDCATprep.
  *
  * There is deliberately NO PostgreSQL TCP connection from Hostinger.
  *

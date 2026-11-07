@@ -79,7 +79,18 @@ function Practice() {
   const paidMember = dashboardQ.data?.membershipStatus === 'ACTIVE';
   const baseQ = useListMcqs(studySet ? { mcqId: -1 } : mcqId ? { mcqId } : pastPaperId ? { pastPaperId } : topicId ? { topicId } : undefined);
   const setQ = useQuery({ queryKey: ['study-set', studySet, studyCount, studyIds.join(',')], queryFn: () => buildStudySet(studySet!, studyCount, studyIds), enabled: !!studySet, staleTime: Infinity, gcTime: 0 });
-  const q = studySet ? setQ : baseQ;
+  // Subject-wise past-paper attempt: ?pastPaperId=5&subject=biology&subject=physics narrows the paper
+  // to the questions grouped under those subjects (keys come from GET /past-papers/:id/subjects,
+  // chosen on the paper's own page).
+  const subjectKeys = pastPaperId && !studySet && !mcqId ? params.getAll('subject').filter(Boolean) : [];
+  const subjectFilterOn = subjectKeys.length > 0;
+  const subjectsQ = useQuery({ queryKey: ['past-paper-subjects', pastPaperId], queryFn: () => pastPapersApi.subjects(pastPaperId!), enabled: subjectFilterOn, staleTime: 60_000 });
+  const filteredData = (() => {
+    if (!subjectFilterOn || !baseQ.data || !subjectsQ.data) return undefined;
+    const allowed = new Set(subjectsQ.data.subjects.filter((s) => subjectKeys.includes(s.key)).flatMap((s) => s.mcqIds));
+    return baseQ.data.filter((m) => allowed.has(m.id));
+  })();
+  const q = studySet ? setQ : subjectFilterOn ? { ...baseQ, data: filteredData, isLoading: baseQ.isLoading || subjectsQ.isLoading } as unknown as typeof baseQ : baseQ;
   const [index, setIndex] = useState(0);
   // Every answer picked so far, keyed by mcq id — lets the student jump
   // freely between questions (via the number grid or Prev/Next) without
@@ -117,6 +128,8 @@ function Practice() {
   // "Shuffle question order" toggle on the setup screen — off by default so
   // the set stays in its curated/syllabus order unless the student opts in.
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  // Past papers never show the old setup screen (the paper's own page is the setup); set only if auto-start was impossible (e.g. trial cap used up).
+  const [autoStartFailed, setAutoStartFailed] = useState(false);
   // Difficulty filter on the setup screen — 'all' keeps the full set;
   // otherwise only questions matching that difficulty are offered.
   const [selectedDifficulty, setSelectedDifficulty] = useState<'all' | 'easy' | 'moderate' | 'hard'>('all');
@@ -207,7 +220,7 @@ function Practice() {
   const progressOn = useRef(false);            // true only while a resumable session is being played
   const progressChain = useRef<Promise<unknown>>(Promise.resolve()); // serialises PUT/DELETE so a late save can't resurrect a finished session
   const resumeHydrated = useRef(false);
-  const canResume = !!(topicId || pastPaperId) && !studySet && !mcqId;
+  const canResume = !!(topicId || pastPaperId) && !studySet && !mcqId && !subjectFilterOn;
   const buildProgress = (): SessionProgress | null => {
     if (!canResume || !orderedMcqs?.length || !mode) return null;
     const ans: Record<string, string | null> = {};
@@ -270,7 +283,7 @@ function Practice() {
     finishSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trialRemainingNow, trialLimited, finished, mode, answeredCount]);
-  const restartSession = () => { progressOn.current = false; setIndex(0); setAnswers({}); setFlaggedIds(new Set()); setVisitedIds(new Set()); setTimerTotal(0); setPanel(null); setPaused(false); setFinished(false); setMode(null); setRemainingSeconds(0); setPendingMode('timed'); setCustomMinutes(null); setOrderedMcqs(null); setSelectedDifficulty('all'); setCountMode('20'); setCustomCount(''); askAi.reset(); };
+  const restartSession = () => { autoStarted.current = false; progressOn.current = false; setIndex(0); setAnswers({}); setFlaggedIds(new Set()); setVisitedIds(new Set()); setTimerTotal(0); setPanel(null); setPaused(false); setFinished(false); setMode(null); setRemainingSeconds(0); setPendingMode('timed'); setCustomMinutes(null); setOrderedMcqs(null); setSelectedDifficulty('all'); setCountMode('20'); setCustomCount(''); askAi.reset(); };
   // Starting a session from the (long) setup screen used to leave the page scrolled down to the
   // question navigator. Land on the first question instead.
   useEffect(() => {
@@ -294,6 +307,38 @@ function Practice() {
     if (!info || !resumeFrom(info)) toast({ title: "Couldn't restore that session", description: 'It may have been finished or removed. Starting fresh.' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeId, mcqs.length, resumeData.isLoading, mode, finished]);
+  // Merged past-paper page (pages/PastPaperDetail.tsx) sends ?go=1 plus the chosen options: begin straight away,
+  // skipping the setup screen. Options: diff=easy|moderate|hard, n=<count>|all, timer=timed|untimed, min=<minutes>, shuffle=1.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    // Past papers never show the setup screen: with or without go=1 they begin immediately
+    // (defaults: every question, timed at 1 min/question — or resume saved progress for this paper).
+    if (autoStarted.current || !pastPaperId || studySet || mcqId || resumeId) return;
+    if (mode || finished || q.isLoading || !mcqs.length || trialUsageQ.isLoading || resumeData.isLoading) return;
+    autoStarted.current = true;
+    if (params.get('go') !== '1' && !subjectFilterOn) {
+      const saved = resumeData.byPaper.get(pastPaperId);
+      if (saved && resumeFrom(saved)) return;
+    }
+    const diff = params.get('diff');
+    const pool = diff ? mcqs.filter((m) => (m.difficulty || 'moderate').toLowerCase() === diff) : mcqs;
+    const nParam = params.get('n');
+    const want = nParam === 'all' || !nParam ? pool.length : Math.max(1, Math.floor(Number(nParam)) || pool.length);
+    const trialCapNow = trialLimited ? (trialUsage!.remaining ?? 0) : null;
+    const size = Math.min(want, pool.length, trialCapNow !== null ? trialCapNow : Infinity);
+    if (size <= 0) { setAutoStartFailed(true); return; } // nothing to start (e.g. trial cap used up) — fall back to the setup screen, which explains it
+    const picked = randomSample(pool, size);
+    const timedRun = params.get('timer') !== 'untimed';
+    const mins = Math.max(1, Math.floor(Number(params.get('min'))) || size);
+    setOrderedMcqs(params.get('shuffle') === '1' ? shuffleArray(picked) : picked);
+    setPendingMode(timedRun ? 'timed' : 'untimed');
+    setMode(timedRun ? 'timed' : 'untimed');
+    setRemainingSeconds(timedRun ? mins * 60 : 0);
+    setTimerTotal(timedRun ? mins * 60 : 0);
+    sessionStartRef.current = Date.now();
+    progressOn.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mcqs.length, q.isLoading, mode, finished, trialUsageQ.isLoading, resumeData.isLoading]);
   // Auto-save progress shortly after every answer / question change.
   const answeredNow = Object.values(answers).filter((v) => v != null).length;
   useEffect(() => {
@@ -327,6 +372,9 @@ function Practice() {
   if (finished) {
     return <div className="max-w-6xl"><SectionHeader eyebrow="Daily practice" title="Session complete" /><PracticeResultCard mcqs={activeMcqs} answers={answers} onRestart={restartSession} onRedoWrong={redoWrong} backHref={pastPaperId ? '/past-papers' : '/mcqs'} backLabel={pastPaperId ? 'Back to past papers' : 'Back to blocks'} /></div>;
   }
+
+  // Past paper: go straight into the session — show a loader (not the old setup screen) while it auto-starts.
+  if (!mode && !finished && pastPaperId && !studySet && !mcqId && !resumeId && !autoStartFailed) return <SkeletonPage />;
 
   if (!mode) {
     // Difficulty mix for this set, shown as quick chips on the hero AND
@@ -431,7 +479,7 @@ function Practice() {
             </div>
           </div>}
           {(() => {
-            const info = (topicId && resumeData.byTopic.get(topicId)) || (pastPaperId && resumeData.byPaper.get(pastPaperId)) || null;
+            const info = subjectFilterOn ? null : (topicId && resumeData.byTopic.get(topicId)) || (pastPaperId && resumeData.byPaper.get(pastPaperId)) || null;
             if (!info) return null;
             return <div className="mb-5 flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/[0.07] p-3.5" data-testid="banner-resume-session">
               <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Play size={15} fill="currentColor" /></div>

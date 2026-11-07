@@ -1,4 +1,4 @@
-// Ensures the MySQL schema needed to receive a MDCAT Proffs backup
+// Ensures the MySQL schema needed to receive a MDCATprep backup
 // exists on the target database, using CREATE TABLE IF NOT EXISTS so it
 // never touches, alters, or drops a table that's already there.
 //
@@ -9,7 +9,7 @@
 // exist yet, so the COUNT(*) throws before anything useful happens. Calling
 // ensureMysqlSchema() first makes both validate and import work the same
 // way against an empty database as they do against one that already has
-// the MDCAT Proffs schema.
+// the MDCATprep schema.
 //
 // Reuses the exact DDL generateSchema.ts emits for
 // `npm run generate:mysql-schema`, so a database prepared automatically

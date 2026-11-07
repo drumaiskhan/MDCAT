@@ -42,7 +42,7 @@ export const pool = databaseUrl
  * Keep the node-postgres Drizzle adapter.
  *
  * The cast is intentional because RemotePgPool is structurally compatible
- * with the runtime operations MDCAT Proffs uses but is not literally pg.Pool.
+ * with the runtime operations MDCATprep uses but is not literally pg.Pool.
  */
 export const db = drizzle(pool as any, {
   schema,

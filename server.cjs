@@ -11,7 +11,7 @@ const apiEntry = path.join(
 );
 
 import(pathToFileURL(apiEntry).href).catch((error) => {
-  console.error("Failed to start MDCAT Proffs API:");
+  console.error("Failed to start MDCATprep API:");
   console.error(error);
   process.exit(1);
 });

@@ -1,5 +1,5 @@
 <?php
-// MedSchoolProffs file bridge (cPanel).  Stores big book PDFs on the cPanel disk.
+// MDCATprep file bridge (cPanel).  Stores big book PDFs on the cPanel disk.
 // Only the API server talks to this script (it sends the shared secret); students never get a link to the files.
 // Install: see README.md in this folder.
 

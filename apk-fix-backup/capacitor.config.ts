@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.mdcatproffs.app',
-  appName: 'MDCAT Proffs',
+  appName: 'MDCATprep',
   webDir: 'dist',
 
   // Live mode: the app loads the real website, so site updates show instantly.

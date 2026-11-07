@@ -587,7 +587,7 @@ async function generateWithCustomEndpoint(baseUrl: string, apiKey: string, model
       // doesn't follow the current domain — same PUBLIC_APP_URL/APP_URL
       // resolution as the email links below.
       "HTTP-Referer": getPublicAppUrl(),
-      "X-Title": "MDCAT",
+      "X-Title": "MDCATprep",
     },
     body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content: openAiUserContent(prompt) }] }),
   });

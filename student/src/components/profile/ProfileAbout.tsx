@@ -36,7 +36,7 @@ export function ProfileAbout() {
   const q = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
   const c = q.data;
   const year = new Date().getFullYear();
-  const name = c?.PLATFORM_NAME || 'MDCAT';
+  const name = c?.PLATFORM_NAME || 'MDCATprep';
 
   if (q.isLoading) return <div className="mt-5 grid gap-5" aria-busy="true"><div className="skeleton h-40 rounded-2xl" /><div className="skeleton h-72 rounded-[1.75rem]" /></div>;
 

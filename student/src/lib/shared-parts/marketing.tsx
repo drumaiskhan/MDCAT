@@ -103,7 +103,7 @@ export function Footer({ variant = 'compact' }: { variant?: 'compact' | 'full' }
   const q = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
   const c = q.data;
   const year = new Date().getFullYear();
-  const platformName = c?.PLATFORM_NAME || 'MDCAT';
+  const platformName = c?.PLATFORM_NAME || 'MDCATprep';
 
   if (variant === 'compact') return <div className="flex items-center justify-between gap-3 font-mono-app text-[10px] text-muted-foreground"><span>© {year} {platformName} · {c?.COPYRIGHT_NOTICE || 'All rights reserved.'}</span><SocialIcons content={c} /></div>;
 

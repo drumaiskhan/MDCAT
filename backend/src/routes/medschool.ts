@@ -479,7 +479,7 @@ router.post("/payments/:id/approve", requireAdmin, async (req, res): Promise<voi
 
   const [student] = await db.select({ name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, payment.userId));
   if (student) {
-    void sendEmail(student.email, "Your MDCAT Proffs membership is active", membershipActivatedEmailHtml(student.name, payment.planName, expiresAt)).catch(() => {});
+    void sendEmail(student.email, "Your MDCATprep membership is active", membershipActivatedEmailHtml(student.name, payment.planName, expiresAt)).catch(() => {});
   }
 
   res.json(ApprovePaymentResponse.parse(await paymentView(updated)));
@@ -497,7 +497,7 @@ router.post("/payments/:id/reject", requireAdmin, async (req, res): Promise<void
 
   const [rejectedStudent] = await db.select({ name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, updated.userId));
   if (rejectedStudent) {
-    void sendEmail(rejectedStudent.email, "Your MDCAT Proffs payment needs attention", paymentRejectedEmailHtml(rejectedStudent.name, body.data.reason)).catch(() => {});
+    void sendEmail(rejectedStudent.email, "Your MDCATprep payment needs attention", paymentRejectedEmailHtml(rejectedStudent.name, body.data.reason)).catch(() => {});
   }
 
   res.json(RejectPaymentResponse.parse(await paymentView(updated)));
@@ -1813,7 +1813,7 @@ router.patch("/students/:id/status", requireAdmin, async (req, res): Promise<voi
 
   if (parsed.data.status === "REJECTED" && parsed.data.message) {
     await db.insert(notificationsTable).values({ userId: row.id, title: "Your account application was rejected", body: parsed.data.message, type: "warning" });
-    void sendEmail(row.email, "Your MDCAT Proffs application needs attention", accountRejectedEmailHtml(row.name, parsed.data.message)).catch(() => {});
+    void sendEmail(row.email, "Your MDCATprep application needs attention", accountRejectedEmailHtml(row.name, parsed.data.message)).catch(() => {});
   }
 
   // IMPORTANT: GET /student/dashboard reads membership status/expiry only
@@ -1852,7 +1852,7 @@ router.patch("/students/:id/status", requireAdmin, async (req, res): Promise<voi
       await db.update(membershipsTable).set({ status: "SUPERSEDED" }).where(and(eq(membershipsTable.userId, id), eq(membershipsTable.status, "ACTIVE")));
       await db.insert(membershipsTable).values({ userId: id, planId: plan?.id ?? null, status: "ACTIVE", startsAt, expiresAt });
       if (plan) grantedMembership = { planId: plan.id, expiresAt };
-      void sendEmail(row.email, "Your MDCAT Proffs membership is active", membershipActivatedEmailHtml(row.name, plan?.name ?? null, expiresAt)).catch(() => {});
+      void sendEmail(row.email, "Your MDCATprep membership is active", membershipActivatedEmailHtml(row.name, plan?.name ?? null, expiresAt)).catch(() => {});
     }
   }
 
@@ -1887,7 +1887,7 @@ router.post("/students/:id/trial", requireAdmin, async (req, res): Promise<void>
   await db.update(usersTable).set({ status: "ACTIVE", statusMessage: null, emailVerified: true }).where(eq(usersTable.id, id));
 
   await db.insert(auditLogsTable).values({ actorId: req.user!.id, action: "STUDENT_TRIAL_STARTED", entity: "user", entityId: id, metadata: JSON.stringify({ durationDays: parsed.data.durationDays, expiresAt }) });
-  void sendEmail(row.email, "Your MDCAT Proffs trial has started", trialActivatedEmailHtml(row.name, expiresAt)).catch(() => {});
+  void sendEmail(row.email, "Your MDCATprep trial has started", trialActivatedEmailHtml(row.name, expiresAt)).catch(() => {});
   res.json({ ok: true, expiresAt: expiresAt.toISOString() });
 });
 

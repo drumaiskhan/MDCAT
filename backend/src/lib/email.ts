@@ -44,7 +44,7 @@ interface EmailConfig {
 async function resolveEmailConfig(): Promise<EmailConfig | null> {
   const dbProvider = await getSetting("EMAIL_PROVIDER", null);
   const senderEmail = (await getSetting("MAIL_FROM", null)) || process.env.MAIL_FROM || "no-reply@mdcat.example.com";
-  const senderName = (await getSetting("MAIL_FROM_NAME", null)) || process.env.BREVO_SENDER_NAME || "MDCAT";
+  const senderName = (await getSetting("MAIL_FROM_NAME", null)) || process.env.BREVO_SENDER_NAME || "MDCATprep";
 
   // 1. Whatever the admin picked at Admin -> Settings -> Email, if it has
   // the fields it needs to actually work.
@@ -120,7 +120,7 @@ async function resolveEmailConfig(): Promise<EmailConfig | null> {
  * the one place that catches and logs, so every call site's existing
  * `.catch(() => {})` still behaves the same way on a failed send as before.
  */
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+export async function sendEmail(to: string, subject: string, html: string, opts?: { throwOnError?: boolean }): Promise<void> {
   try {
     const config = await resolveEmailConfig();
     if (config?.provider === "brevo") { await sendViaBrevo(to, subject, html, config); return; }
@@ -128,7 +128,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     if (config?.provider === "smtp") { await sendViaSmtp(to, subject, html, config); return; }
   } catch (err) {
     logger.error({ err, to, subject }, "Failed to send email");
+    // Callers that must tell the user whether the mail actually went out
+    // (signup OTP, resend code) opt in to the error instead of a silent return.
+    if (opts?.throwOnError) throw err;
     return;
+  }
+
+  // Nothing configured: in strict mode that is a failure the caller must see,
+  // otherwise signup would claim "we emailed you a code" when nothing was sent.
+  if (opts?.throwOnError && process.env.NODE_ENV === "production") {
+    throw new Error("No email provider is configured — OTP email was not sent.");
   }
 
   logger.info({ to, subject }, "[email:dev-mode] No email provider configured — logging email instead of sending");
@@ -218,7 +227,7 @@ async function sendViaSmtp(to: string, subject: string, html: string, config: Em
     socketTimeout: 20_000,
   });
   try {
-    await transport.sendMail({ from: config.senderEmail, to, subject, html });
+    await transport.sendMail({ from: { name: config.senderName, address: config.senderEmail }, to, subject, html });
   } finally {
     transport.close();
   }
@@ -243,16 +252,16 @@ export async function sendTestEmail(to: string, slot?: number): Promise<void> {
     if (slot !== undefined) {
       const target = config.brevoSlots?.find((s) => s.slot === slot);
       if (!target) throw new Error(`Brevo slot ${slot} has no API key saved yet — save your settings first.`);
-      return sendViaBrevoSlot(to, "MDCAT Proffs test email", testEmailHtml(), config, target);
+      return sendViaBrevoSlot(to, "MDCATprep test email", testEmailHtml(), config, target);
     }
-    return sendViaBrevo(to, "MDCAT Proffs test email", testEmailHtml(), config);
+    return sendViaBrevo(to, "MDCATprep test email", testEmailHtml(), config);
   }
-  if (config.provider === "custom") return sendViaCustomApi(to, "MDCAT Proffs test email", testEmailHtml(), config);
-  return sendViaSmtp(to, "MDCAT Proffs test email", testEmailHtml(), config);
+  if (config.provider === "custom") return sendViaCustomApi(to, "MDCATprep test email", testEmailHtml(), config);
+  return sendViaSmtp(to, "MDCATprep test email", testEmailHtml(), config);
 }
 
 function testEmailHtml(): string {
-  return `<p>This is a test email from MDCAT Proffs admin settings.</p><p>If you're reading this, your email provider is configured correctly.</p>`;
+  return `<p>This is a test email from MDCATprep admin settings.</p><p>If you're reading this, your email provider is configured correctly.</p>`;
 }
 
 /**
@@ -264,7 +273,7 @@ function testEmailHtml(): string {
  */
 export function otpEmailHtml(name: string, code: string): string {
   const spaced = code.split("").join(" ");
-  return `<p>Hi ${name},</p><p>Welcome to MDCAT Proffs. Use this code to verify your email address:</p><p style="font-size:32px;font-weight:800;letter-spacing:4px;margin:16px 0;">${spaced}</p><p>This code expires in 10 minutes. If you didn't create this account, you can ignore this email.</p>`;
+  return `<p>Hi ${name},</p><p>Welcome to MDCATprep. Use this code to verify your email address:</p><p style="font-size:32px;font-weight:800;letter-spacing:4px;margin:16px 0;">${spaced}</p><p>This code expires in 10 minutes. If you didn't create this account, you can ignore this email.</p>`;
 }
 
 /**
@@ -274,7 +283,7 @@ export function otpEmailHtml(name: string, code: string): string {
  * actually usable, distinct from the verification link email above.
  */
 export function welcomeEmailHtml(name: string, loginUrl: string): string {
-  return `<p>Hi ${name},</p><p>Your email is verified and your MDCAT Proffs account is ready to go. Welcome aboard!</p><p>Log in to get started:</p><p><a href="${loginUrl}">${loginUrl}</a></p><p>If you ever need help, just reply to this email.</p>`;
+  return `<p>Hi ${name},</p><p>Your email is verified and your MDCATprep account is ready to go. Welcome aboard!</p><p>Log in to get started:</p><p><a href="${loginUrl}">${loginUrl}</a></p><p>If you ever need help, just reply to this email.</p>`;
 }
 
 /**
@@ -304,7 +313,7 @@ export function resetPasswordEmailHtml(name: string, resetUrl: string): string {
 
 export function membershipActivatedEmailHtml(name: string, planName: string | null, expiresAt: Date): string {
   const expiry = expiresAt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return `<p>Hi ${name},</p><p>Good news — your payment has been verified and your MDCAT Proffs membership is now <strong>active</strong>${planName ? ` (${planName})` : ""}.</p><p>Your access is valid until <strong>${expiry}</strong>.</p><p>Log in any time to pick up where you left off.</p>`;
+  return `<p>Hi ${name},</p><p>Good news — your payment has been verified and your MDCATprep membership is now <strong>active</strong>${planName ? ` (${planName})` : ""}.</p><p>Your access is valid until <strong>${expiry}</strong>.</p><p>Log in any time to pick up where you left off.</p>`;
 }
 
 /**
@@ -315,7 +324,7 @@ export function membershipActivatedEmailHtml(name: string, planName: string | nu
  */
 export function trialActivatedEmailHtml(name: string, expiresAt: Date): string {
   const expiry = expiresAt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-  return `<p>Hi ${name},</p><p>Your MDCAT Proffs trial has started — you now have full access to the platform, free.</p><p>Your trial runs until <strong>${expiry}</strong>. We'll let you know before it ends.</p><p>Log in any time to explore.</p>`;
+  return `<p>Hi ${name},</p><p>Your MDCATprep trial has started — you now have full access to the platform, free.</p><p>Your trial runs until <strong>${expiry}</strong>. We'll let you know before it ends.</p><p>Log in any time to explore.</p>`;
 }
 
 /** Sent the moment a student submits payment proof, before any admin review. */
@@ -330,12 +339,12 @@ export function paymentRejectedEmailHtml(name: string, reason: string): string {
 
 /** Sent when an admin rejects a student's account application, with the message they gave. */
 export function accountRejectedEmailHtml(name: string, message: string): string {
-  return `<p>Hi ${name},</p><p>Your MDCAT Proffs account application wasn't approved.</p><p><strong>Message from the team:</strong> ${message}</p><p>If you think this is a mistake or have questions, please reach out to support.</p>`;
+  return `<p>Hi ${name},</p><p>Your MDCATprep account application wasn't approved.</p><p><strong>Message from the team:</strong> ${message}</p><p>If you think this is a mistake or have questions, please reach out to support.</p>`;
 }
 
 /** Sent to the opponent the moment a challenge is created — see POST /challenges. */
 export function challengeInviteEmailHtml(opponentName: string, challengerName: string, questionCount: number, appUrl: string): string {
-  return `<p>Hi ${opponentName},</p><p><strong>${challengerName}</strong> just challenged you to a ${questionCount}-question quiz match on MDCAT Proffs.</p><p><a href="${appUrl}/challenge">Accept the challenge and play</a></p><p>Whoever scores higher wins bragging rights — good luck!</p>`;
+  return `<p>Hi ${opponentName},</p><p><strong>${challengerName}</strong> just challenged you to a ${questionCount}-question quiz match on MDCATprep.</p><p><a href="${appUrl}/challenge">Accept the challenge and play</a></p><p>Whoever scores higher wins bragging rights — good luck!</p>`;
 }
 
 /** Sent to both players once each has a completed attempt on the same challenge — see POST /challenges/:id/submit. */

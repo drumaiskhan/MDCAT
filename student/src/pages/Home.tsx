@@ -61,7 +61,7 @@ export default function Home() {
   const userQuery = useGetCurrentUser({ query: { retry: false, queryKey: getGetCurrentUserQueryKey() } });
   const siteQ = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
   const plansQ = useListMembershipPlans();
-  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCAT';
+  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCATprep';
   const tagline = siteQ.data?.PLATFORM_TAGLINE;
   const plans = (plansQ.data ?? []).filter((p) => p.active).sort((a, b) => a.displayOrder - b.displayOrder);
 

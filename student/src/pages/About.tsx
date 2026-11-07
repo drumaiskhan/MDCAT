@@ -21,7 +21,7 @@ const VALUES = [
 
 export default function About() {
   const siteQ = useQuery({ queryKey: ['site-content'], queryFn: siteContentApi.get });
-  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCAT';
+  const platformName = siteQ.data?.PLATFORM_NAME || 'MDCATprep';
   const team = siteQ.data?.team?.filter((t) => t.active) ?? [];
 
   useDocumentHead({

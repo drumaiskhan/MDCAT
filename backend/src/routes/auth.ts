@@ -341,7 +341,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   // they know to use "Resend code" once SMTP is fixed.
   let emailSent = true;
   try {
-    await sendEmail(email, "Verify your MDCAT Proffs account", otpEmailHtml(created.name, code));
+    await sendEmail(email, "Verify your MDCATprep account", otpEmailHtml(created.name, code), { throwOnError: true });
   } catch (err) {
     emailSent = false;
     logger.error({ err, email }, "[auth] Failed to send signup OTP email — account was still created");
@@ -656,7 +656,7 @@ router.post("/auth/verify-otp", async (req, res): Promise<void> => {
   // a slow/down mail provider should never delay or fail the verification
   // response itself.
   if (verifiedUser) {
-    void sendEmail(verifiedUser.email, "Welcome to MDCAT Proffs", welcomeEmailHtml(verifiedUser.name, `${APP_URL}/login`)).catch(() => {});
+    void sendEmail(verifiedUser.email, "Welcome to MDCATprep", welcomeEmailHtml(verifiedUser.name, `${APP_URL}/login`)).catch(() => {});
   }
 
   res.json({
@@ -686,7 +686,7 @@ router.post("/auth/resend-verification", async (req, res): Promise<void> => {
     const { code, hash } = generateOtp();
     await db.insert(emailVerificationTokensTable).values({ userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + OTP_EXPIRY_MS) });
     try {
-      await sendEmail(email, "Verify your MDCAT Proffs account", otpEmailHtml(user.name, code));
+      await sendEmail(email, "Verify your MDCATprep account", otpEmailHtml(user.name, code), { throwOnError: true });
     } catch (err) {
       logger.error({ err, email }, "[auth] Failed to send resend-verification OTP email");
     }
@@ -717,7 +717,7 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     const { raw, hash } = generateOneTimeToken();
     await db.insert(passwordResetTokensTable).values({ userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
     try {
-      await sendEmail(email, "Reset your MDCAT Proffs password", resetPasswordEmailHtml(user.name, `${APP_URL}/reset-password?token=${raw}`));
+      await sendEmail(email, "Reset your MDCATprep password", resetPasswordEmailHtml(user.name, `${APP_URL}/reset-password?token=${raw}`));
     } catch (err) {
       logger.error({ err, email }, "[auth] Failed to send password-reset email");
     }

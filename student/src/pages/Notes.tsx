@@ -41,7 +41,7 @@ export function NotesReader(){
   <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b bg-card p-4 text-foreground"><Link href="/notes" aria-label="Back to notes"><ArrowLeft size={20}/></Link><h1 className="min-w-0 flex-1 font-bold">{note.data?.title}</h1><button aria-label="Toggle contents" onClick={()=>setTocOpen(!tocOpen)} className="rounded-lg border p-2"><Menu size={18}/></button><button aria-label="Change text size" onClick={()=>setSize(s=>s>=24?16:s+2)} className="rounded-lg border p-2"><Type size={18}/></button><button aria-label="Toggle reading theme" onClick={()=>setDark(!dark)} className="rounded-lg border p-2">{dark?<Sun size={18}/>:<Moon size={18}/>}</button></header>
   <div className="mx-auto flex max-w-7xl flex-col gap-7 p-5 md:flex-row md:p-8">
    {tocOpen&&<aside className="shrink-0 md:sticky md:top-24 md:max-h-[75vh] md:w-60 overflow-auto"><h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-primary">Contents</h2>{prepared.toc.map(h=><a className="block rounded-lg px-3 py-2 text-sm hover:bg-primary/10" style={{paddingLeft:Math.max(0,h.level-2)*12+12}} href={'#'+h.id} key={h.id}>{h.text}</a>)}</aside>}
-   <main className="min-w-0 flex-1" style={{fontSize:size}}><NoteBody html={prepared.html} subjectId={String(id)} userId={user?.uid} watermarkText={user?.email||'MDCAT'} allLoaded={true} isDark={dark}/></main>
+   <main className="min-w-0 flex-1" style={{fontSize:size}}><NoteBody html={prepared.html} subjectId={String(id)} userId={user?.uid} watermarkText={user?.email||'MDCATprep'} allLoaded={true} isDark={dark}/></main>
   </div>
  </div>;
 }

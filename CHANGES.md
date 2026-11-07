@@ -78,3 +78,9 @@ All workspace TypeScript checks and three production builds passed. Clean npm ci
 * `deploy.yml` now tests, builds and deploys only the API to cPanel.
 * `student/` and `admin/` are standalone like Medify: the shared API client is copied into each app (`src/lib/api-client-react`), `@workspace/api-client-react` imports became `@/lib/api-client-react`, `tsconfig.json` no longer extends the root, and the two apps are no longer root workspaces (root scripts use `--prefix`). The `@assets` alias to `backend/assets` was removed (unused).
 * Root `npm run setup`/CI use `npm install` (and per-app installs) until fresh lockfiles are committed.
+
+## Past papers: per-subject page (ported from MedSchoolProffs)
+- New student page `/past-papers/:id` (`student/src/pages/PastPaperDetail.tsx`): pick one, several or all subjects, then difficulty, number of questions, timer and shuffle, and start. Past-paper cards now open this page instead of jumping straight into practice.
+- `Practice.tsx` understands the options the page sends (`go`, `subject`, `diff`, `n`, `timer`, `min`, `shuffle`) and starts the session immediately for past papers.
+- Backend: `GET /past-papers/:id/subjects` groups a paper's questions by subject (admin-tagged subject first, otherwise an AI label, otherwise "General"). `src/lib/paperTopics.ts` sorts untagged questions with the configured AI provider in the background (when a paper is first opened, and right after an import into a paper). Two new nullable columns on `med_mcqs` (`paper_subject`, `paper_subject_ver`) are added automatically by ensureSchema on start-up.
+- Requires: rebuild + redeploy the API and the student app. Subject sorting needs an AI provider configured in Admin → Settings.
